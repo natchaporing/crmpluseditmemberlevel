@@ -7,6 +7,7 @@ import {
   clearLoginAttempts,
   recordFailedLogin,
 } from "@/lib/auth/rate-limit";
+import { rememberPos } from "@/lib/auth/pos-cookie";
 import { createSession, destroySession } from "@/lib/auth/session";
 import { BuzzebeesAuthError, operatorLogin } from "@/lib/buzzebees/auth";
 import { missingLoginVars } from "@/lib/buzzebees/config";
@@ -27,6 +28,9 @@ export type LoginState = {
    */
   username?: string;
 };
+
+/** Longest accepted Terminal, Branch or Brand ID. */
+const MAX_POS_FIELD = 64;
 
 /**
  * Only same-origin paths are accepted, so a crafted `?next=` cannot turn the
@@ -60,6 +64,15 @@ export async function login(
   if (!terminalId || !branchId || !brandId) {
     return {
       error: "กรุณากรอก Terminal ID, Branch ID และ Brand ID",
+      ...entered,
+    };
+  }
+
+  // These are short identifiers. Capping them keeps a pasted essay out of the
+  // login request and out of the cookie that remembers the till.
+  if ([terminalId, branchId, brandId].some((v) => v.length > MAX_POS_FIELD)) {
+    return {
+      error: `Terminal ID, Branch ID และ Brand ID ต้องยาวไม่เกิน ${MAX_POS_FIELD} ตัวอักษร`,
       ...entered,
     };
   }
@@ -119,6 +132,9 @@ export async function login(
     branchId,
     brandId,
   });
+
+  // Outlives the session, so the next sign-in at this till starts pre-filled.
+  await rememberPos({ terminalId, branchId, brandId });
 
   redirect(next);
 }

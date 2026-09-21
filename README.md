@@ -61,6 +61,14 @@ serves operators at different terminals, so they are entered per sign-in and
 carried in the session cookie afterwards, which is why the app does not ask
 again on every action.
 
+A successful login also writes the till to a second cookie, `crmplus_pos`,
+which outlives the session. Signing in again at the same terminal finds the
+three fields already filled; only the username and password have to be typed.
+It stores no credentials, is `HttpOnly` like the session (the login page is
+server-rendered and fills the form in itself), and lasts 180 days. Logging out
+deliberately leaves it in place — that is the point of it. It is per browser,
+so a different machine starts from empty fields.
+
 Because Buzzebees exposes several login endpoints and which one authenticates
 operators differs per deployment, the path is configurable:
 
@@ -82,6 +90,7 @@ the till values there are unrelated to what an operator types at login.
 | --- | --- |
 | Credential check | `POST` to the configured Buzzebees login endpoint — `src/lib/buzzebees/auth.ts` |
 | Session | HS256 JWT in an `HttpOnly`, `SameSite=Lax` cookie, 8-hour expiry, `Secure` in production; carries the operator and their till — `src/lib/auth/session.ts` |
+| Remembered till | `crmplus_pos`, `HttpOnly`, 180 days, written on a successful login to pre-fill the form — `src/lib/auth/pos-cookie.ts` |
 | Route gating | `src/proxy.ts` verifies the cookie signature and redirects to `/login` |
 | Authoritative check | `requireSession()` re-checks in every page and Server Action — `src/lib/auth/dal.ts` |
 | Brute-force throttle | 5 failed attempts per username per 10 minutes — `src/lib/auth/rate-limit.ts` |

@@ -19,7 +19,20 @@ function SubmitButton() {
   );
 }
 
-export function LoginForm({ next }: { next: string }) {
+/** Mirrors `PosCookie`, redeclared so this client file imports no server module. */
+type PosDefaults = {
+  terminalId: string;
+  branchId: string;
+  brandId: string;
+};
+
+export function LoginForm({
+  next,
+  remembered,
+}: {
+  next: string;
+  remembered: PosDefaults | null;
+}) {
   const [state, formAction] = useActionState<LoginState, FormData>(login, {});
 
   return (
@@ -77,8 +90,9 @@ export function LoginForm({ next }: { next: string }) {
               inputMode="numeric"
               autoComplete="off"
               required
-              // Kept across a failed login, like the username.
-              defaultValue={state[field.name] ?? ""}
+              // What was just typed wins; otherwise the till remembered from
+              // the last successful login here.
+              defaultValue={state[field.name] ?? remembered?.[field.name] ?? ""}
               className="rounded-lg border border-line bg-surface px-4 py-3 outline-none focus:border-brand"
             />
           </div>

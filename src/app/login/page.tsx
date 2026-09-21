@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/app/login/login-form";
 import { BrandMark } from "@/components/brand-mark";
 import { getSession } from "@/lib/auth/dal";
+import { readRememberedPos } from "@/lib/auth/pos-cookie";
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   // Proxy already bounces cookie-holders away; re-check here because the
@@ -11,6 +12,9 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
   const { next } = await searchParams;
   const target = typeof next === "string" ? next : "/";
+
+  // Read server-side: the cookie is HttpOnly, so the form cannot fetch it.
+  const remembered = await readRememberedPos();
 
   return (
     <main className="flex flex-1 items-center justify-center p-4">
@@ -25,7 +29,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             </div>
           </div>
 
-          <LoginForm next={target} />
+          <LoginForm next={target} remembered={remembered} />
         </div>
       </div>
     </main>
