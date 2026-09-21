@@ -36,7 +36,14 @@ export function stampWalletBaseUrl(): string {
   );
 }
 
-/** CRM Plus back office, which owns the profile-update endpoint. */
+/**
+ * CRM Plus back office: profile updates, the level list and the change log.
+ *
+ * Every default here is production. Reference requests for these endpoints
+ * have been captured against `-uat` hosts, but those are request templates —
+ * the shape of a call, not the host to send it to. Point this at a non-
+ * production host only to deliberately target one.
+ */
 export function crmPlusBaseUrl(): string {
   return (
     process.env.BUZZEBEES_CRMPLUS_BASE_URL?.trim() ||
