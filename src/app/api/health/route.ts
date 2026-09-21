@@ -1,4 +1,7 @@
-import { missingBuzzebeesVars } from "@/lib/buzzebees/config";
+import {
+  missingBuzzebeesVars,
+  missingLoginVars,
+} from "@/lib/buzzebees/config";
 
 /**
  * Deployment health check.
@@ -11,9 +14,11 @@ import { missingBuzzebeesVars } from "@/lib/buzzebees/config";
  * checked that the process was listening would mark a broken release healthy,
  * because the login page renders fine right up until someone tries to log in.
  *
- * The Buzzebees variables are reported but do not fail the probe — the UI
- * still reads the placeholder member store, so the app is usable without
- * them. Fold them into `missing` once the UI calls the live API.
+ * Only `SESSION_SECRET` fails the probe. The Buzzebees variables are reported
+ * instead, so that a deploy missing them still comes up and can say so through
+ * this endpoint rather than crash-looping — but note that operators sign in
+ * against the Buzzebees API, so **nobody can log in while `login.ready` is
+ * false**. Watch that field, not just the status code.
  */
 export async function GET() {
   const missing: string[] = [];
@@ -21,12 +26,16 @@ export async function GET() {
   const secret = process.env.SESSION_SECRET;
   if (!secret || secret.length < 32) missing.push("SESSION_SECRET");
 
-  if (!process.env.AUTH_USERS?.trim()) missing.push("AUTH_USERS");
-
+  const loginMissing = missingLoginVars();
   const buzzebeesMissing = missingBuzzebeesVars();
+
   const body = {
     ok: missing.length === 0,
     missing,
+    login: {
+      ready: loginMissing.length === 0,
+      missing: loginMissing,
+    },
     buzzebees: {
       configured: buzzebeesMissing.length === 0,
       missing: buzzebeesMissing,

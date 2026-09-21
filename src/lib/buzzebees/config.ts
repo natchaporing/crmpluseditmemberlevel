@@ -81,3 +81,39 @@ export function secretValues(): string[] {
     (value): value is string => Boolean(value),
   );
 }
+
+/**
+ * Path of the endpoint that verifies an operator's credentials.
+ *
+ * Buzzebees exposes several login endpoints and which one authenticates
+ * operators differs per deployment, so this is configurable rather than
+ * hard-coded. It is joined onto `merchantBaseUrl()`.
+ */
+export function operatorLoginPath(): string {
+  return process.env.BUZZEBEES_LOGIN_PATH?.trim() || "/merchant/login";
+}
+
+/**
+ * The till the operator is signing in at. These identify the store, not the
+ * person, so they stay environment-configured even though the username and
+ * password now come from the login form.
+ */
+export function posContext(): Record<string, string> {
+  return {
+    terminalid: required("BUZZEBEES_TERMINAL_ID"),
+    branchid: required("BUZZEBEES_BRANCH_ID"),
+    brandid: required("BUZZEBEES_BRAND_ID"),
+  };
+}
+
+/** The variables operator login needs. A subset of `REQUIRED_BUZZEBEES_VARS`. */
+export const REQUIRED_LOGIN_VARS = [
+  "BUZZEBEES_APP_ID",
+  "BUZZEBEES_TERMINAL_ID",
+  "BUZZEBEES_BRANCH_ID",
+  "BUZZEBEES_BRAND_ID",
+] as const;
+
+export function missingLoginVars(): string[] {
+  return REQUIRED_LOGIN_VARS.filter((name) => !process.env[name]?.trim());
+}

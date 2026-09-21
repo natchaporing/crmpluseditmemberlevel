@@ -4,6 +4,8 @@ import {
   appId,
   merchantBaseUrl,
   merchantCredentials,
+  operatorLoginPath,
+  posContext,
   secretValues,
 } from "@/lib/buzzebees/config";
 
@@ -36,20 +38,30 @@ export class BuzzebeesAuthError extends Error {
 
   constructor(
     message: string,
-    options: { status?: number; body?: string; cause?: unknown } = {},
+    options: {
+      status?: number;
+      body?: string;
+      cause?: unknown;
+      /** Extra values to scrub, e.g. a password typed into the login form. */
+      secrets?: string[];
+    } = {},
   ) {
     super(message, { cause: options.cause });
     this.name = "BuzzebeesAuthError";
     this.status = options.status ?? 0;
-    this.body = redact(options.body ?? "").slice(0, MAX_BODY_SNIPPET);
+    this.body = redact(options.body ?? "", options.secrets).slice(
+      0,
+      MAX_BODY_SNIPPET,
+    );
   }
 }
 
 /** Strips credential values in case the service echoes the request back. */
-function redact(text: string): string {
+function redact(text: string, extraSecrets: string[] = []): string {
   let output = text;
 
-  for (const value of secretValues()) {
+  for (const value of [...secretValues(), ...extraSecrets]) {
+    if (!value) continue;
     output = output.split(value).join("***");
   }
 
@@ -73,17 +85,27 @@ function extractToken(payload: Record<string, unknown>): string | null {
 }
 
 /**
- * Performs a fresh merchant login. Prefer `getMerchantToken()`, which caches.
+ * Posts one set of credentials to a Buzzebees login endpoint and pulls the
+ * token out of the reply.
+ *
+ * Shared by the service-account login and operator login — they differ only in
+ * which credentials they send and which path they post to. Credentials that
+ * the service rejects come back as `null`; anything else throws, so a
+ * misconfigured deploy is loud instead of looking like a typed-wrong password.
  */
-export async function merchantLogin(): Promise<MerchantLogin> {
+async function performLogin(
+  path: string,
+  fields: Record<string, string>,
+  extraSecrets: string[] = [],
+): Promise<MerchantLogin | null> {
   const form = new FormData();
-  for (const [field, value] of Object.entries(merchantCredentials())) {
+  for (const [field, value] of Object.entries(fields)) {
     form.append(field, value);
   }
 
   let response: Response;
   try {
-    response = await fetch(`${merchantBaseUrl()}${LOGIN_PATH}`, {
+    response = await fetch(`${merchantBaseUrl()}${path}`, {
       method: "POST",
       // Content-Type is intentionally omitted: fetch derives it from the
       // FormData body along with the multipart boundary. Setting it by hand
@@ -94,17 +116,22 @@ export async function merchantLogin(): Promise<MerchantLogin> {
     });
   } catch (cause) {
     throw new BuzzebeesAuthError(
-      "Could not reach the Buzzebees merchant login endpoint.",
-      { cause },
+      `Could not reach the Buzzebees login endpoint ${path}.`,
+      { cause, secrets: extraSecrets },
     );
   }
 
   const text = await response.text();
 
+  // Only an explicit auth rejection counts as "wrong credentials". A 400 is
+  // deliberately not in this set: it usually means a malformed request, and
+  // reporting that as a bad password would hide the real fault.
+  if (response.status === 401 || response.status === 403) return null;
+
   if (!response.ok) {
     throw new BuzzebeesAuthError(
-      `Merchant login failed with HTTP ${response.status}.`,
-      { status: response.status, body: text },
+      `Login to ${path} failed with HTTP ${response.status}.`,
+      { status: response.status, body: text, secrets: extraSecrets },
     );
   }
 
@@ -112,16 +139,17 @@ export async function merchantLogin(): Promise<MerchantLogin> {
   try {
     payload = JSON.parse(text);
   } catch {
-    throw new BuzzebeesAuthError("Merchant login returned a non-JSON body.", {
+    throw new BuzzebeesAuthError(`Login to ${path} returned a non-JSON body.`, {
       status: response.status,
       body: text,
+      secrets: extraSecrets,
     });
   }
 
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
     throw new BuzzebeesAuthError(
-      "Merchant login returned an unexpected JSON shape.",
-      { status: response.status, body: text },
+      `Login to ${path} returned an unexpected JSON shape.`,
+      { status: response.status, body: text, secrets: extraSecrets },
     );
   }
 
@@ -130,12 +158,87 @@ export async function merchantLogin(): Promise<MerchantLogin> {
 
   if (!token) {
     throw new BuzzebeesAuthError(
-      `Merchant login succeeded but no token field was found (keys: ${Object.keys(raw).join(", ") || "none"}).`,
-      { status: response.status, body: text },
+      `Login to ${path} succeeded but no token field was found (keys: ${Object.keys(raw).join(", ") || "none"}).`,
+      { status: response.status, body: text, secrets: extraSecrets },
     );
   }
 
   return { token, raw };
+}
+
+/**
+ * Performs a fresh service-account login. Prefer `getMerchantToken()`, which
+ * caches.
+ *
+ * The service account drives the app's own API calls. Operators signing in is
+ * a separate flow — see `operatorLogin()`.
+ */
+export async function merchantLogin(): Promise<MerchantLogin> {
+  const result = await performLogin(LOGIN_PATH, merchantCredentials());
+
+  if (!result) {
+    throw new BuzzebeesAuthError(
+      "Merchant login was rejected. Check BUZZEBEES_USERNAME and BUZZEBEES_PASSWORD.",
+      { status: 401 },
+    );
+  }
+
+  return result;
+}
+
+/** An operator who has just proved their identity to Buzzebees. */
+export type OperatorIdentity = {
+  username: string;
+  /** Display name from the reply, falling back to the username. */
+  name: string;
+};
+
+/** Keys the reply might carry a human-readable name under. */
+const NAME_KEYS = [
+  "name",
+  "Name",
+  "fullname",
+  "fullName",
+  "FullName",
+  "full_name",
+  "displayname",
+  "displayName",
+  "DisplayName",
+  "display_name",
+] as const;
+
+function extractName(payload: Record<string, unknown>): string | null {
+  for (const key of NAME_KEYS) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+/**
+ * Verifies an operator's own credentials against Buzzebees.
+ *
+ * Returns their identity when the service accepts them, or `null` when it
+ * rejects them. There is no local user list: whoever the API vouches for can
+ * sign in. The terminal, branch and brand identify the till rather than the
+ * person, so they still come from the environment.
+ *
+ * Which endpoint authenticates operators varies per deployment, hence
+ * `BUZZEBEES_LOGIN_PATH`.
+ */
+export async function operatorLogin(
+  username: string,
+  password: string,
+): Promise<OperatorIdentity | null> {
+  const result = await performLogin(
+    operatorLoginPath(),
+    { username, password, ...posContext() },
+    [password],
+  );
+
+  if (!result) return null;
+
+  return { username, name: extractName(result.raw) ?? username };
 }
 
 type TokenCache = { token: string; expiresAt: number };

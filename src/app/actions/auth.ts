@@ -8,7 +8,8 @@ import {
   recordFailedLogin,
 } from "@/lib/auth/rate-limit";
 import { createSession, destroySession } from "@/lib/auth/session";
-import { getConfiguredUsers, verifyCredentials } from "@/lib/auth/users";
+import { BuzzebeesAuthError, operatorLogin } from "@/lib/buzzebees/auth";
+import { missingLoginVars } from "@/lib/buzzebees/config";
 
 export type LoginState = {
   error?: string;
@@ -43,9 +44,10 @@ export async function login(
     return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน", username };
   }
 
-  if (getConfiguredUsers().length === 0) {
+  const missingConfig = missingLoginVars();
+  if (missingConfig.length > 0) {
     return {
-      error: "ยังไม่ได้ตั้งค่าผู้ใช้งาน (AUTH_USERS) — ดูวิธีตั้งค่าที่ README",
+      error: `ยังไม่ได้ตั้งค่าการเชื่อมต่อ Buzzebees (${missingConfig.join(", ")}) — ดูวิธีตั้งค่าที่ README`,
       username,
     };
   }
@@ -60,14 +62,33 @@ export async function login(
     };
   }
 
-  const user = await verifyCredentials(username, password);
-  if (!user) {
+  // Credentials are checked by Buzzebees, not against any local list.
+  let operator;
+  try {
+    operator = await operatorLogin(username, password);
+  } catch (error) {
+    // A login the service could not answer is not the operator's fault, so it
+    // neither counts against the throttle nor reports a wrong password.
+    if (error instanceof BuzzebeesAuthError) {
+      console.error(
+        `Operator login failed: ${error.message}`,
+        error.status ? { status: error.status, body: error.body } : {},
+      );
+      return {
+        error: "ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้ กรุณาลองใหม่อีกครั้ง",
+        username,
+      };
+    }
+    throw error;
+  }
+
+  if (!operator) {
     recordFailedLogin(throttleKey);
     return { error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง", username };
   }
 
   clearLoginAttempts(throttleKey);
-  await createSession({ sub: user.username, name: user.name });
+  await createSession({ sub: operator.username, name: operator.name });
 
   redirect(next);
 }

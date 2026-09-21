@@ -6,8 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "auth:hash": "node scripts/hash-password.mjs"
+    "lint": "eslint"
   },
   "dependencies": {
     "jose": "^6.2.12",

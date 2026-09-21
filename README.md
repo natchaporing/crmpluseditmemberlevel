@@ -35,7 +35,9 @@ page.
 
 ## Authentication
 
-Two environment variables drive the login.
+Operators sign in with their **own Buzzebees credentials**. There is no local
+user list and no admin account: whoever the Buzzebees API vouches for can sign
+in, and anyone it rejects cannot.
 
 ### `SESSION_SECRET`
 
@@ -46,34 +48,34 @@ session without it.
 openssl rand -base64 48
 ```
 
-### `AUTH_USERS`
+### Operator login
 
-The operators allowed to sign in. Entries are separated by `;` or a newline,
-fields by `|`:
+The login form posts the typed username and password to Buzzebees as
+`multipart/form-data`, along with the terminal, branch and brand from the
+environment — those identify the till, not the person. A reply carrying a
+token means the operator is who they say they are; the token is used to
+confirm identity and is not stored in the session cookie.
 
-```
-<username>|<display name>|<password hash>
-```
-
-Passwords are never stored in plain text. Generate a hash with:
-
-```bash
-npm run auth:hash -- somchai "Somchai J."
-```
-
-The script prompts for the password on stdin (so it stays out of your shell
-history), then prints a line to paste into `AUTH_USERS`. Minimum password
-length is 12 characters.
+Because Buzzebees exposes several login endpoints and which one authenticates
+operators differs per deployment, the path is configurable:
 
 ```
-AUTH_USERS="somchai|Somchai J.|scrypt:16384:8:1:<salt>:<hash>;malee|Malee S.|scrypt:..."
+BUZZEBEES_LOGIN_PATH=/merchant/login   # the default
 ```
+
+Login therefore needs `BUZZEBEES_APP_ID`, `BUZZEBEES_TERMINAL_ID`,
+`BUZZEBEES_BRANCH_ID` and `BUZZEBEES_BRAND_ID`. **Nobody can sign in until
+those are set** — `/api/health` reports this as `login.ready`.
+
+`BUZZEBEES_USERNAME` and `BUZZEBEES_PASSWORD` are a separate service account
+used for the app's own API calls (member lookup, level changes), not for
+signing anyone in.
 
 ### How it works
 
 | Concern | Where |
 | --- | --- |
-| Password hashing | scrypt (`N=16384, r=8, p=1`), per-user random salt, constant-time compare — `src/lib/auth/users.ts` |
+| Credential check | `POST` to the configured Buzzebees login endpoint — `src/lib/buzzebees/auth.ts` |
 | Session | HS256 JWT in an `HttpOnly`, `SameSite=Lax` cookie, 8-hour expiry, `Secure` in production — `src/lib/auth/session.ts` |
 | Route gating | `src/proxy.ts` verifies the cookie signature and redirects to `/login` |
 | Authoritative check | `requireSession()` re-checks in every page and Server Action — `src/lib/auth/dal.ts` |
@@ -83,8 +85,18 @@ The proxy is a redirect convenience, not the security boundary: every Server
 Action calls `requireSession()` itself, per the Next.js guidance that Proxy
 should not be the only line of defence.
 
-Two things to know before deploying:
+Only an explicit `401` or `403` from Buzzebees is treated as a wrong password.
+Any other failure (unreachable service, `404` from a misconfigured
+`BUZZEBEES_LOGIN_PATH`, a non-JSON reply) surfaces as a connection error, is
+logged server-side with the status and body, and does **not** count against
+the throttle — so a misconfigured deploy cannot masquerade as a typo.
 
+Three things to know before deploying:
+
+- The exact request and response shape of the login endpoint has **not been
+  confirmed against the live service**. Token and display-name fields are read
+  under the usual key spellings; confirm against the real API before relying on
+  it in production.
 - The login throttle is **in-memory**, so it resets on restart and is per
   instance. Move it to Redis (or similar) before running more than one
   instance.
@@ -114,13 +126,13 @@ The server reads `PORT` and `HOSTNAME` at startup; the image defaults to
 | Variable | |
 | --- | --- |
 | `SESSION_SECRET` | Random, 32+ characters |
-| `AUTH_USERS` | Operator entries — see [Authentication](#authentication) |
 | `BUZZEBEES_APP_ID` | Merchant API app id |
-| `BUZZEBEES_USERNAME` | Merchant login |
-| `BUZZEBEES_PASSWORD` | Merchant password |
+| `BUZZEBEES_USERNAME` | Service-account login (not operator sign-in) |
+| `BUZZEBEES_PASSWORD` | Service-account password |
 | `BUZZEBEES_TERMINAL_ID` | Terminal id |
 | `BUZZEBEES_BRANCH_ID` | Branch id |
 | `BUZZEBEES_BRAND_ID` | Brand id |
+| `BUZZEBEES_LOGIN_PATH` | Optional — operator login endpoint, defaults to `/merchant/login` |
 
 None are needed at build time: every route that reads them is rendered on
 demand, so the image itself holds no secrets.
@@ -186,7 +198,6 @@ Sample numbers for the placeholder store: `0900000001`, `0900000002`,
 | `npm run build` | Create a production build |
 | `npm run start` | Serve the production build |
 | `npm run lint` | Lint the project |
-| `npm run auth:hash -- <username> [name]` | Generate an `AUTH_USERS` entry |
 
 ## Project layout
 
@@ -199,8 +210,8 @@ src/
     page.tsx        # The console, behind requireSession()
   components/       # UI: tabs, member card, history, modals
   lib/
-    auth/           # Sessions, user store, rate limiting, access checks
-    buzzebees/      # Buzzebees API: credentials, merchant login, profile
+    auth/           # Sessions, rate limiting, access checks
+    buzzebees/      # Buzzebees API: credentials, operator + merchant login, profile
     members/        # Domain types, levels, data source
   proxy.ts          # Route gate (Next.js 16's renamed middleware)
 ```
