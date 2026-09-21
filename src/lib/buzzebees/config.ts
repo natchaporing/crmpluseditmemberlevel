@@ -36,6 +36,14 @@ export function stampWalletBaseUrl(): string {
   );
 }
 
+/** CRM Plus back office, which owns the profile-update endpoint. */
+export function crmPlusBaseUrl(): string {
+  return (
+    process.env.BUZZEBEES_CRMPLUS_BASE_URL?.trim() ||
+    "https://buzzcrmplusssomodule.buzzebees.com"
+  );
+}
+
 export function appId(): string {
   return required("BUZZEBEES_APP_ID");
 }

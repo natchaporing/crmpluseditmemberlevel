@@ -5,6 +5,7 @@ import {
   getMerchantToken,
   invalidateMerchantToken,
 } from "@/lib/buzzebees/auth";
+import { appId } from "@/lib/buzzebees/config";
 import { logCurl } from "@/lib/buzzebees/curl-log";
 
 /** Error bodies are echoed for debugging, but only a bounded prefix. */
@@ -83,16 +84,35 @@ async function send(
   token: string,
 ): Promise<Response> {
   const headers = {
+    // Every Buzzebees endpoint expects the app id, authenticated calls
+    // included — not just the login POST.
+    "app-id": appId(),
     ...(init.headers as Record<string, string> | undefined),
     Authorization: authorizationHeader(token),
   };
 
-  logCurl(`${init.method ?? "GET"} ${url}`, {
-    method: init.method ?? "GET",
-    url,
-    headers,
-    body: typeof init.body === "string" ? init.body : undefined,
-  }, [token]);
+  // A multipart body is logged as -F fields; anything else as --data.
+  const form =
+    init.body instanceof FormData
+      ? Object.fromEntries(
+          Array.from(init.body.entries(), ([name, value]) => [
+            name,
+            typeof value === "string" ? value : "<binary>",
+          ]),
+        )
+      : undefined;
+
+  logCurl(
+    `${init.method ?? "GET"} ${url}`,
+    {
+      method: init.method ?? "GET",
+      url,
+      headers,
+      form,
+      body: typeof init.body === "string" ? init.body : undefined,
+    },
+    [token],
+  );
 
   try {
     return await fetch(url, {
