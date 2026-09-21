@@ -1,6 +1,8 @@
 "use server";
 
 import { requireSession } from "@/lib/auth/dal";
+import { BuzzebeesAuthError } from "@/lib/buzzebees/auth";
+import { BuzzebeesApiError } from "@/lib/buzzebees/client";
 import {
   changeMemberLevel,
   findMemberByPhone,
@@ -12,7 +14,8 @@ import type { LevelChange, Member } from "@/lib/members/types";
 export type SearchResult =
   | { status: "found"; member: Member }
   | { status: "not-found"; phone: string }
-  | { status: "invalid"; message: string };
+  | { status: "invalid"; message: string }
+  | { status: "error"; message: string };
 
 export async function searchMember(phone: string): Promise<SearchResult> {
   await requireSession();
@@ -26,7 +29,25 @@ export async function searchMember(phone: string): Promise<SearchResult> {
     return { status: "invalid", message: "รูปแบบเบอร์โทรไม่ถูกต้อง" };
   }
 
-  const member = await findMemberByPhone(trimmed);
+  // A CRM that cannot be reached is not the same as a customer who is not
+  // there, and must not be reported as one.
+  let member;
+  try {
+    member = await findMemberByPhone(trimmed);
+  } catch (error) {
+    if (error instanceof BuzzebeesApiError || error instanceof BuzzebeesAuthError) {
+      console.error(`Member lookup failed: ${error.message}`, {
+        status: error.status,
+        body: error.body,
+      });
+      return {
+        status: "error",
+        message: "ไม่สามารถเชื่อมต่อระบบ CRM ได้ กรุณาลองใหม่อีกครั้ง",
+      };
+    }
+    throw error;
+  }
+
   return member ? { status: "found", member } : { status: "not-found", phone: trimmed };
 }
 
@@ -64,6 +85,8 @@ export async function saveMemberLevel(
     "not-found": "ไม่พบลูกค้ารายนี้ในระบบ",
     "unknown-level": "ไม่รู้จัก Level ที่เลือก",
     "same-level": "Level ที่เลือกตรงกับ Level ปัจจุบันอยู่แล้ว",
+    "write-not-wired":
+      "ยังไม่ได้เชื่อมต่อการบันทึก Level กลับไปยัง CRM — ค้นหาข้อมูลได้ แต่ยังบันทึกไม่ได้",
   };
 
   return { status: "error", message: messages[result.error] };
