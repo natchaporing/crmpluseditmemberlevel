@@ -68,6 +68,7 @@ export function extractLevels(json: unknown): CrmPlusLevel[] {
  * be inspected rather than guessed at.
  */
 export async function fetchUserLevels(
+  token: string,
   agency: string = agencyId(),
 ): Promise<{ levels: CrmPlusLevel[]; raw: unknown }> {
   const url = new URL(PROFILE_PATH, crmPlusBaseUrl());
@@ -76,7 +77,11 @@ export async function fetchUserLevels(
   url.searchParams.set("device_app_id", appId());
   url.searchParams.set("agencyId", agency);
 
-  const { json } = await buzzebeesFetch(url.toString(), { method: "GET" });
+  const { json } = await buzzebeesFetch(
+    url.toString(),
+    { method: "GET", headers: { "app-id": appId() } },
+    token,
+  );
 
   return { levels: extractLevels(json), raw: json };
 }

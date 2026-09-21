@@ -19,6 +19,9 @@ import {
  * this endpoint rather than crash-looping — but note that operators sign in
  * against the Buzzebees API, so **nobody can log in while `login.ready` is
  * false**. Watch that field, not just the status code.
+ *
+ * No credential is named here, because none is configured: operators sign in
+ * with their own and the token they receive carries their later calls.
  */
 export async function GET() {
   const missing: string[] = [];

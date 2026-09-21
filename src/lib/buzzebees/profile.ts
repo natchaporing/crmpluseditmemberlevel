@@ -12,13 +12,17 @@ import { stampWalletBaseUrl } from "@/lib/buzzebees/config";
  */
 export async function fetchPosProfile(
   contactNumber: string,
+  token: string,
 ): Promise<Record<string, unknown> | null> {
   const url = new URL("/pos/profile", stampWalletBaseUrl());
   url.searchParams.set("contactNumber", contactNumber);
 
-  const { status, json } = await buzzebeesFetch(url.toString(), {
-    method: "GET",
-  });
+  // Only the token: this endpoint does not take an app-id header.
+  const { status, json } = await buzzebeesFetch(
+    url.toString(),
+    { method: "GET" },
+    token,
+  );
 
   // 404, an empty body, or an empty array all mean "no such customer".
   if (status === 404 || json === null) return null;

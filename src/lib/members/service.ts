@@ -73,9 +73,12 @@ export function isValidPhone(input: string): boolean {
  * Reads the live service rather than the placeholder store, so a number the
  * CRM knows is found and one it does not is not.
  */
-export async function findMemberByPhone(phone: string): Promise<Member | null> {
+export async function findMemberByPhone(
+  phone: string,
+  token: string,
+): Promise<Member | null> {
   const normalised = normalisePhone(phone);
-  const profile = await fetchPosProfile(normalised);
+  const profile = await fetchPosProfile(normalised, token);
 
   return profile ? toMember(profile, normalised) : null;
 }
@@ -91,8 +94,9 @@ export async function changeMemberLevel(options: {
   phone: string;
   toLevelCode: string;
   changedBy: string;
+  token: string;
 }): Promise<ChangeLevelResult> {
-  const member = await findMemberByPhone(options.phone);
+  const member = await findMemberByPhone(options.phone, options.token);
   if (!member) return { ok: false, error: "not-found" };
 
   const target = findLevel(options.toLevelCode);

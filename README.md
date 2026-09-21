@@ -79,10 +79,12 @@ BUZZEBEES_LOGIN_PATH=/merchant/login   # the default
 Login therefore needs only `BUZZEBEES_APP_ID`. **Nobody can sign in until it
 is set** — `/api/health` reports this as `login.ready`.
 
-`BUZZEBEES_USERNAME`, `BUZZEBEES_PASSWORD`, `BUZZEBEES_TERMINAL_ID`,
-`BUZZEBEES_BRANCH_ID` and `BUZZEBEES_BRAND_ID` configure a separate service
-account for the app's own API calls. They are not used to sign anyone in, and
-the till values there are unrelated to what an operator types at login.
+There is no service account. The token an operator receives from
+`/merchant/login` is the one their lookups and updates are made with, so no
+Buzzebees credentials are configured anywhere — only the app id and the agency.
+
+`BUZZEBEES_LOGIN_PATH` accepts a path, joined onto the merchant base URL, or a
+whole URL, used as given.
 
 ### How it works
 
@@ -164,11 +166,6 @@ The server reads `PORT` and `HOSTNAME` at startup; the image defaults to
 | --- | --- |
 | `SESSION_SECRET` | Random, 32+ characters |
 | `BUZZEBEES_APP_ID` | Merchant API app id — the only one login needs |
-| `BUZZEBEES_USERNAME` | Service-account login (not operator sign-in) |
-| `BUZZEBEES_PASSWORD` | Service-account password |
-| `BUZZEBEES_TERMINAL_ID` | Service-account terminal id |
-| `BUZZEBEES_BRANCH_ID` | Service-account branch id |
-| `BUZZEBEES_BRAND_ID` | Service-account brand id |
 | `BUZZEBEES_LOGIN_PATH` | Optional — operator login endpoint, defaults to `/merchant/login` |
 | `BUZZEBEES_LOG_CURL` | Optional — log outgoing requests as curl commands |
 | `BUZZEBEES_AGENCY_ID` | Agency (tenant) whose members and levels this deployment manages — the production agency, which differs from the one in UAT captures |

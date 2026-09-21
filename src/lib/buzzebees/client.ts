@@ -1,11 +1,6 @@
 import "server-only";
 
-import {
-  authorizationHeader,
-  getMerchantToken,
-  invalidateMerchantToken,
-} from "@/lib/buzzebees/auth";
-import { appId } from "@/lib/buzzebees/config";
+import { authorizationHeader } from "@/lib/buzzebees/auth";
 import { logCurl } from "@/lib/buzzebees/curl-log";
 
 /** Error bodies are echoed for debugging, but only a bounded prefix. */
@@ -37,22 +32,24 @@ export type BuzzebeesResponse = {
 };
 
 /**
- * Calls a Buzzebees endpoint with the merchant token attached.
+ * Calls a Buzzebees endpoint with an operator's token attached.
  *
- * A 401 is retried once against a freshly minted token, since the cached one
- * may have expired before its assumed TTL ran out. Non-2xx responses other
- * than that raise `BuzzebeesApiError`; the caller decides what a 404 means.
+ * The token comes from the caller — it is the one that operator received when
+ * they signed in. There is nothing to refresh on a 401, since minting a new
+ * token would need their password, so a rejected token surfaces as an error
+ * and the operator signs in again.
+ *
+ * Any header the endpoint wants beyond `Authorization` is the caller's to
+ * supply: `/pos/profile` takes only the token, while the CRM Plus endpoints
+ * also expect `app-id`. Non-2xx responses other than 404 raise
+ * `BuzzebeesApiError`; the caller decides what a 404 means.
  */
 export async function buzzebeesFetch(
   url: string,
   init: RequestInit = {},
+  token?: string,
 ): Promise<BuzzebeesResponse> {
-  let response = await send(url, init, await getMerchantToken());
-
-  if (response.status === 401) {
-    invalidateMerchantToken();
-    response = await send(url, init, await getMerchantToken());
-  }
+  const response = await send(url, init, token);
 
   const text = await response.text();
 
@@ -81,15 +78,12 @@ export async function buzzebeesFetch(
 async function send(
   url: string,
   init: RequestInit,
-  token: string,
+  token: string | undefined,
 ): Promise<Response> {
-  const headers = {
-    // Every Buzzebees endpoint expects the app id, authenticated calls
-    // included — not just the login POST.
-    "app-id": appId(),
+  const headers: Record<string, string> = {
     ...(init.headers as Record<string, string> | undefined),
-    Authorization: authorizationHeader(token),
   };
+  if (token) headers.Authorization = authorizationHeader(token);
 
   // A multipart body is logged as -F fields; anything else as --data.
   const form =
@@ -111,7 +105,7 @@ async function send(
       form,
       body: typeof init.body === "string" ? init.body : undefined,
     },
-    [token],
+    token ? [token] : [],
   );
 
   try {

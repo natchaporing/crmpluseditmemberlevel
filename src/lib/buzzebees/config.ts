@@ -65,33 +65,16 @@ export function appId(): string {
   return required("BUZZEBEES_APP_ID");
 }
 
-export type MerchantCredentials = {
-  username: string;
-  password: string;
-  terminalid: string;
-  branchid: string;
-  brandid: string;
-};
-
-/** Sent as multipart/form-data fields to `POST /merchant/login`. */
-export function merchantCredentials(): MerchantCredentials {
-  return {
-    username: required("BUZZEBEES_USERNAME"),
-    password: required("BUZZEBEES_PASSWORD"),
-    terminalid: required("BUZZEBEES_TERMINAL_ID"),
-    branchid: required("BUZZEBEES_BRANCH_ID"),
-    brandid: required("BUZZEBEES_BRAND_ID"),
-  };
-}
-
-/** Every variable the Buzzebees integration needs, for the health probe. */
+/**
+ * Every variable the Buzzebees integration needs, for the health probe.
+ *
+ * No credentials among them: operators sign in with their own, and the token
+ * they get back is what every later call travels with. The terminal, branch
+ * and brand are typed at the login screen, not configured here.
+ */
 export const REQUIRED_BUZZEBEES_VARS = [
   "BUZZEBEES_APP_ID",
-  "BUZZEBEES_USERNAME",
-  "BUZZEBEES_PASSWORD",
-  "BUZZEBEES_TERMINAL_ID",
-  "BUZZEBEES_BRANCH_ID",
-  "BUZZEBEES_BRAND_ID",
+  "BUZZEBEES_AGENCY_ID",
 ] as const;
 
 export function missingBuzzebeesVars(): string[] {
@@ -100,19 +83,14 @@ export function missingBuzzebeesVars(): string[] {
   );
 }
 
-/** Credential values that must never reach a log or an error message. */
-export function secretValues(): string[] {
-  return [process.env.BUZZEBEES_PASSWORD?.trim()].filter(
-    (value): value is string => Boolean(value),
-  );
-}
-
 /**
  * Path of the endpoint that verifies an operator's credentials.
  *
  * Buzzebees exposes several login endpoints and which one authenticates
  * operators differs per deployment, so this is configurable rather than
- * hard-coded. It is joined onto `merchantBaseUrl()`.
+ * hard-coded. A path is joined onto `merchantBaseUrl()`; a whole URL is used
+ * as given, since it is easy to set this to one by mistake and a silent
+ * "https://host.comhttps://host.com" is a miserable thing to debug.
  */
 export function operatorLoginPath(): string {
   return process.env.BUZZEBEES_LOGIN_PATH?.trim() || "/merchant/login";

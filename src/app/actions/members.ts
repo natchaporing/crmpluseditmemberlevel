@@ -18,7 +18,7 @@ export type SearchResult =
   | { status: "error"; message: string };
 
 export async function searchMember(phone: string): Promise<SearchResult> {
-  await requireSession();
+  const session = await requireSession();
 
   const trimmed = phone.trim();
   if (!trimmed) {
@@ -33,7 +33,7 @@ export async function searchMember(phone: string): Promise<SearchResult> {
   // there, and must not be reported as one.
   let member;
   try {
-    member = await findMemberByPhone(trimmed);
+    member = await findMemberByPhone(trimmed, session.token);
   } catch (error) {
     if (error instanceof BuzzebeesApiError || error instanceof BuzzebeesAuthError) {
       console.error(`Member lookup failed: ${error.message}`, {
@@ -70,6 +70,7 @@ export async function saveMemberLevel(
     phone,
     toLevelCode,
     changedBy: session.sub,
+    token: session.token,
   });
 
   if (result.ok) {

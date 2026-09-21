@@ -23,6 +23,11 @@ export type SessionPayload = {
   terminalId: string;
   branchId: string;
   brandId: string;
+  /**
+   * The Buzzebees token from this operator's sign-in. Every lookup and update
+   * they make travels with it, so it lives as long as their session does.
+   */
+  token: string;
 };
 
 let cachedKey: Uint8Array | undefined;
@@ -47,6 +52,7 @@ export async function encryptSession(payload: SessionPayload): Promise<string> {
     terminalId: payload.terminalId,
     branchId: payload.branchId,
     brandId: payload.brandId,
+    token: payload.token,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.sub)
@@ -65,7 +71,7 @@ export async function decryptSession(
       algorithms: ["HS256"],
     });
 
-    const { sub, name, terminalId, branchId, brandId } = payload;
+    const { sub, name, terminalId, branchId, brandId, token: apiToken } = payload;
 
     // A session minted before the till fields existed fails this check and is
     // treated as signed out, which is the safe direction.
@@ -74,12 +80,13 @@ export async function decryptSession(
       typeof name !== "string" ||
       typeof terminalId !== "string" ||
       typeof branchId !== "string" ||
-      typeof brandId !== "string"
+      typeof brandId !== "string" ||
+      typeof apiToken !== "string"
     ) {
       return null;
     }
 
-    return { sub, name, terminalId, branchId, brandId };
+    return { sub, name, terminalId, branchId, brandId, token: apiToken };
   } catch {
     // Expired, tampered with, or signed by a different secret.
     return null;

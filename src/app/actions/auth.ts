@@ -131,6 +131,7 @@ export async function login(
     terminalId,
     branchId,
     brandId,
+    token: operator.token,
   });
 
   // Outlives the session, so the next sign-in at this till starts pre-filled.

@@ -99,7 +99,10 @@ export function withLevelName(
  * a missing or non-string field is rejected. That check is the guard against
  * wiping data with a half-built object.
  */
-export async function updateCrmPlusUser(user: CrmPlusUser): Promise<unknown> {
+export async function updateCrmPlusUser(
+  user: CrmPlusUser,
+  token: string,
+): Promise<unknown> {
   const missing = USER_FIELDS.filter(
     (field) => typeof user[field] !== "string",
   );
@@ -111,12 +114,17 @@ export async function updateCrmPlusUser(user: CrmPlusUser): Promise<unknown> {
   form.append("device_app_id", appId());
   for (const field of USER_FIELDS) form.append(field, user[field]);
 
-  const { json } = await buzzebeesFetch(`${crmPlusBaseUrl()}${UPDATE_PATH}`, {
-    method: "POST",
-    // Content-Type is omitted on purpose: fetch derives it from the FormData
-    // body along with the multipart boundary.
-    body: form,
-  });
+  const { json } = await buzzebeesFetch(
+    `${crmPlusBaseUrl()}${UPDATE_PATH}`,
+    {
+      method: "POST",
+      // Content-Type is omitted on purpose: fetch derives it from the FormData
+      // body along with the multipart boundary.
+      headers: { "app-id": appId() },
+      body: form,
+    },
+    token,
+  );
 
   return json;
 }

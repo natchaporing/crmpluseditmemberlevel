@@ -3,29 +3,17 @@ import "server-only";
 import {
   appId,
   merchantBaseUrl,
-  merchantCredentials,
   operatorLoginPath,
-  secretValues,
 } from "@/lib/buzzebees/config";
 import { logCurl } from "@/lib/buzzebees/curl-log";
 
 /**
- * Merchant authentication against `POST /merchant/login`.
+ * Operator authentication against `POST /merchant/login`.
  *
- * The endpoint takes multipart/form-data and returns a token used to authorise
- * subsequent merchant calls. Its exact response shape has not been confirmed
- * against the live service yet, so the token is looked up under the usual key
- * spellings and the decoded body is handed back untouched as `raw`.
+ * The endpoint takes multipart/form-data and returns the token that authorises
+ * every later call. There is no second, service-level account: the token an
+ * operator receives here is the one their lookups and updates travel with.
  */
-
-const LOGIN_PATH = "/merchant/login";
-
-/**
- * How long a token is reused before logging in again. The service does not
- * document an expiry, so this is deliberately short; call
- * `invalidateMerchantToken()` when a downstream call rejects a token early.
- */
-const TOKEN_TTL_MS = 30 * 60 * 1000;
 
 /** Error bodies are echoed for debugging, but only a bounded prefix. */
 const MAX_BODY_SNIPPET = 500;
@@ -60,7 +48,7 @@ export class BuzzebeesAuthError extends Error {
 function redact(text: string, extraSecrets: string[] = []): string {
   let output = text;
 
-  for (const value of [...secretValues(), ...extraSecrets]) {
+  for (const value of extraSecrets) {
     if (!value) continue;
     output = output.split(value).join("***");
   }
@@ -103,14 +91,16 @@ async function performLogin(
     form.append(field, value);
   }
 
-  const url = `${merchantBaseUrl()}${path}`;
+  // The configured login endpoint may be given as a path or as a whole URL.
+  // Joining a whole URL onto the base would produce nonsense like
+  // "https://host.comhttps://host.com", which fails as "could not reach".
+  const url = /^https?:\/\//i.test(path) ? path : `${merchantBaseUrl()}${path}`;
 
-  logCurl(`POST ${path}`, {
-    method: "POST",
-    url,
-    headers: { "app-id": appId() },
-    form: fields,
-  }, [...extraSecrets, ...secretValues()]);
+  logCurl(
+    `POST ${url}`,
+    { method: "POST", url, headers: { "app-id": appId() }, form: fields },
+    extraSecrets,
+  );
 
   let response: Response;
   try {
@@ -125,7 +115,7 @@ async function performLogin(
     });
   } catch (cause) {
     throw new BuzzebeesAuthError(
-      `Could not reach the Buzzebees login endpoint ${path}.`,
+      `Could not reach the Buzzebees login endpoint ${url}.`,
       { cause, secrets: extraSecrets },
     );
   }
@@ -139,7 +129,7 @@ async function performLogin(
 
   if (!response.ok) {
     throw new BuzzebeesAuthError(
-      `Login to ${path} failed with HTTP ${response.status}.`,
+      `Login to ${url} failed with HTTP ${response.status}.`,
       { status: response.status, body: text, secrets: extraSecrets },
     );
   }
@@ -148,7 +138,7 @@ async function performLogin(
   try {
     payload = JSON.parse(text);
   } catch {
-    throw new BuzzebeesAuthError(`Login to ${path} returned a non-JSON body.`, {
+    throw new BuzzebeesAuthError(`Login to ${url} returned a non-JSON body.`, {
       status: response.status,
       body: text,
       secrets: extraSecrets,
@@ -157,7 +147,7 @@ async function performLogin(
 
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
     throw new BuzzebeesAuthError(
-      `Login to ${path} returned an unexpected JSON shape.`,
+      `Login to ${url} returned an unexpected JSON shape.`,
       { status: response.status, body: text, secrets: extraSecrets },
     );
   }
@@ -167,32 +157,12 @@ async function performLogin(
 
   if (!token) {
     throw new BuzzebeesAuthError(
-      `Login to ${path} succeeded but no token field was found (keys: ${Object.keys(raw).join(", ") || "none"}).`,
+      `Login to ${url} succeeded but no token field was found (keys: ${Object.keys(raw).join(", ") || "none"}).`,
       { status: response.status, body: text, secrets: extraSecrets },
     );
   }
 
   return { token, raw };
-}
-
-/**
- * Performs a fresh service-account login. Prefer `getMerchantToken()`, which
- * caches.
- *
- * The service account drives the app's own API calls. Operators signing in is
- * a separate flow — see `operatorLogin()`.
- */
-export async function merchantLogin(): Promise<MerchantLogin> {
-  const result = await performLogin(LOGIN_PATH, merchantCredentials());
-
-  if (!result) {
-    throw new BuzzebeesAuthError(
-      "Merchant login was rejected. Check BUZZEBEES_USERNAME and BUZZEBEES_PASSWORD.",
-      { status: 401 },
-    );
-  }
-
-  return result;
 }
 
 /** The till an operator is signing in at, as typed on the login form. */
@@ -207,6 +177,8 @@ export type OperatorIdentity = {
   username: string;
   /** Display name from the reply, falling back to the username. */
   name: string;
+  /** The token every later call for this operator is made with. */
+  token: string;
 };
 
 /** Keys the reply might carry a human-readable name under. */
@@ -261,49 +233,11 @@ export async function operatorLogin(
 
   if (!result) return null;
 
-  return { username, name: extractName(result.raw) ?? username };
-}
-
-type TokenCache = { token: string; expiresAt: number };
-
-// Kept on globalThis so dev-server hot reloads do not force a new login.
-const globalForAuth = globalThis as unknown as {
-  __buzzebeesToken?: TokenCache;
-  __buzzebeesLogin?: Promise<string>;
-};
-
-/**
- * Returns a merchant token, reusing the cached one until it ages out.
- *
- * Concurrent callers share a single in-flight login rather than each opening
- * their own.
- */
-export async function getMerchantToken(
-  options: { forceRefresh?: boolean } = {},
-): Promise<string> {
-  if (options.forceRefresh) invalidateMerchantToken();
-
-  const cached = globalForAuth.__buzzebeesToken;
-  if (cached && cached.expiresAt > Date.now()) return cached.token;
-
-  globalForAuth.__buzzebeesLogin ??= merchantLogin()
-    .then(({ token }) => {
-      globalForAuth.__buzzebeesToken = {
-        token,
-        expiresAt: Date.now() + TOKEN_TTL_MS,
-      };
-      return token;
-    })
-    .finally(() => {
-      globalForAuth.__buzzebeesLogin = undefined;
-    });
-
-  return globalForAuth.__buzzebeesLogin;
-}
-
-/** Drops the cached token, so the next call logs in again. */
-export function invalidateMerchantToken(): void {
-  globalForAuth.__buzzebeesToken = undefined;
+  return {
+    username,
+    name: extractName(result.raw) ?? username,
+    token: result.token,
+  };
 }
 
 /**

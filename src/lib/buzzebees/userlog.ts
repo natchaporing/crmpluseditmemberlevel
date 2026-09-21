@@ -109,6 +109,7 @@ export function extractUserLog(json: unknown): CrmPlusUserLogEntry[] {
  */
 export async function fetchUserLog(
   user: string,
+  token: string,
   agency: string = agencyId(),
 ): Promise<{ entries: CrmPlusUserLogEntry[]; raw: unknown }> {
   const url = new URL(USERLOG_PATH, crmPlusBaseUrl());
@@ -116,7 +117,11 @@ export async function fetchUserLog(
   url.searchParams.set("agencyId", agency);
   url.searchParams.set("userId", user);
 
-  const { json } = await buzzebeesFetch(url.toString(), { method: "GET" });
+  const { json } = await buzzebeesFetch(
+    url.toString(),
+    { method: "GET", headers: { "app-id": appId() } },
+    token,
+  );
 
   return { entries: extractUserLog(json), raw: json };
 }
