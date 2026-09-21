@@ -5,7 +5,6 @@ import {
   merchantBaseUrl,
   merchantCredentials,
   operatorLoginPath,
-  posContext,
   secretValues,
 } from "@/lib/buzzebees/config";
 
@@ -186,6 +185,13 @@ export async function merchantLogin(): Promise<MerchantLogin> {
   return result;
 }
 
+/** The till an operator is signing in at, as typed on the login form. */
+export type PosContext = {
+  terminalId: string;
+  branchId: string;
+  brandId: string;
+};
+
 /** An operator who has just proved their identity to Buzzebees. */
 export type OperatorIdentity = {
   username: string;
@@ -220,8 +226,8 @@ function extractName(payload: Record<string, unknown>): string | null {
  *
  * Returns their identity when the service accepts them, or `null` when it
  * rejects them. There is no local user list: whoever the API vouches for can
- * sign in. The terminal, branch and brand identify the till rather than the
- * person, so they still come from the environment.
+ * sign in. The terminal, branch and brand identify the till and are typed on
+ * the login form alongside the username and password.
  *
  * Which endpoint authenticates operators varies per deployment, hence
  * `BUZZEBEES_LOGIN_PATH`.
@@ -229,10 +235,17 @@ function extractName(payload: Record<string, unknown>): string | null {
 export async function operatorLogin(
   username: string,
   password: string,
+  pos: PosContext,
 ): Promise<OperatorIdentity | null> {
   const result = await performLogin(
     operatorLoginPath(),
-    { username, password, ...posContext() },
+    {
+      username,
+      password,
+      terminalid: pos.terminalId,
+      branchid: pos.branchId,
+      brandid: pos.brandId,
+    },
     [password],
   );
 

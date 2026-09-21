@@ -15,6 +15,14 @@ export type SessionPayload = {
   sub: string;
   /** Display name shown in the header. */
   name: string;
+  /**
+   * The till the operator signed in at. Typed on the login form rather than
+   * configured per deployment, and carried in the session so the app knows
+   * where a level change happened without asking again on every action.
+   */
+  terminalId: string;
+  branchId: string;
+  brandId: string;
 };
 
 let cachedKey: Uint8Array | undefined;
@@ -34,7 +42,12 @@ function secretKey(): Uint8Array {
 }
 
 export async function encryptSession(payload: SessionPayload): Promise<string> {
-  return new SignJWT({ name: payload.name })
+  return new SignJWT({
+    name: payload.name,
+    terminalId: payload.terminalId,
+    branchId: payload.branchId,
+    brandId: payload.brandId,
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.sub)
     .setIssuedAt()
@@ -52,11 +65,21 @@ export async function decryptSession(
       algorithms: ["HS256"],
     });
 
-    if (typeof payload.sub !== "string" || typeof payload.name !== "string") {
+    const { sub, name, terminalId, branchId, brandId } = payload;
+
+    // A session minted before the till fields existed fails this check and is
+    // treated as signed out, which is the safe direction.
+    if (
+      typeof sub !== "string" ||
+      typeof name !== "string" ||
+      typeof terminalId !== "string" ||
+      typeof branchId !== "string" ||
+      typeof brandId !== "string"
+    ) {
       return null;
     }
 
-    return { sub: payload.sub, name: payload.name };
+    return { sub, name, terminalId, branchId, brandId };
   } catch {
     // Expired, tampered with, or signed by a different secret.
     return null;

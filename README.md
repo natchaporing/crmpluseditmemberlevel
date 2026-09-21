@@ -50,11 +50,16 @@ openssl rand -base64 48
 
 ### Operator login
 
-The login form posts the typed username and password to Buzzebees as
-`multipart/form-data`, along with the terminal, branch and brand from the
-environment — those identify the till, not the person. A reply carrying a
-token means the operator is who they say they are; the token is used to
-confirm identity and is not stored in the session cookie.
+The login form asks for five things: username, password, Terminal ID, Branch
+ID and Brand ID. All five are typed by the operator and posted to Buzzebees as
+`multipart/form-data`. A reply carrying a token means the operator is who they
+say they are; the token confirms identity and is not stored in the session
+cookie.
+
+The till values are **not** environment configuration — the same deployment
+serves operators at different terminals, so they are entered per sign-in and
+carried in the session cookie afterwards, which is why the app does not ask
+again on every action.
 
 Because Buzzebees exposes several login endpoints and which one authenticates
 operators differs per deployment, the path is configurable:
@@ -63,20 +68,20 @@ operators differs per deployment, the path is configurable:
 BUZZEBEES_LOGIN_PATH=/merchant/login   # the default
 ```
 
-Login therefore needs `BUZZEBEES_APP_ID`, `BUZZEBEES_TERMINAL_ID`,
-`BUZZEBEES_BRANCH_ID` and `BUZZEBEES_BRAND_ID`. **Nobody can sign in until
-those are set** — `/api/health` reports this as `login.ready`.
+Login therefore needs only `BUZZEBEES_APP_ID`. **Nobody can sign in until it
+is set** — `/api/health` reports this as `login.ready`.
 
-`BUZZEBEES_USERNAME` and `BUZZEBEES_PASSWORD` are a separate service account
-used for the app's own API calls (member lookup, level changes), not for
-signing anyone in.
+`BUZZEBEES_USERNAME`, `BUZZEBEES_PASSWORD`, `BUZZEBEES_TERMINAL_ID`,
+`BUZZEBEES_BRANCH_ID` and `BUZZEBEES_BRAND_ID` configure a separate service
+account for the app's own API calls. They are not used to sign anyone in, and
+the till values there are unrelated to what an operator types at login.
 
 ### How it works
 
 | Concern | Where |
 | --- | --- |
 | Credential check | `POST` to the configured Buzzebees login endpoint — `src/lib/buzzebees/auth.ts` |
-| Session | HS256 JWT in an `HttpOnly`, `SameSite=Lax` cookie, 8-hour expiry, `Secure` in production — `src/lib/auth/session.ts` |
+| Session | HS256 JWT in an `HttpOnly`, `SameSite=Lax` cookie, 8-hour expiry, `Secure` in production; carries the operator and their till — `src/lib/auth/session.ts` |
 | Route gating | `src/proxy.ts` verifies the cookie signature and redirects to `/login` |
 | Authoritative check | `requireSession()` re-checks in every page and Server Action — `src/lib/auth/dal.ts` |
 | Brute-force throttle | 5 failed attempts per username per 10 minutes — `src/lib/auth/rate-limit.ts` |
@@ -126,12 +131,12 @@ The server reads `PORT` and `HOSTNAME` at startup; the image defaults to
 | Variable | |
 | --- | --- |
 | `SESSION_SECRET` | Random, 32+ characters |
-| `BUZZEBEES_APP_ID` | Merchant API app id |
+| `BUZZEBEES_APP_ID` | Merchant API app id — the only one login needs |
 | `BUZZEBEES_USERNAME` | Service-account login (not operator sign-in) |
 | `BUZZEBEES_PASSWORD` | Service-account password |
-| `BUZZEBEES_TERMINAL_ID` | Terminal id |
-| `BUZZEBEES_BRANCH_ID` | Branch id |
-| `BUZZEBEES_BRAND_ID` | Brand id |
+| `BUZZEBEES_TERMINAL_ID` | Service-account terminal id |
+| `BUZZEBEES_BRANCH_ID` | Service-account branch id |
+| `BUZZEBEES_BRAND_ID` | Service-account brand id |
 | `BUZZEBEES_LOGIN_PATH` | Optional — operator login endpoint, defaults to `/merchant/login` |
 
 None are needed at build time: every route that reads them is rendered on

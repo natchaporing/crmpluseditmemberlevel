@@ -57,6 +57,34 @@ export function LoginForm({ next }: { next: string }) {
         />
       </div>
 
+      <fieldset className="flex flex-col gap-4 rounded-lg border border-line p-4">
+        <legend className="px-1 text-sm text-muted">จุดขาย</legend>
+
+        {(
+          [
+            { name: "terminalId", label: "Terminal ID" },
+            { name: "branchId", label: "Branch ID" },
+            { name: "brandId", label: "Brand ID" },
+          ] as const
+        ).map((field) => (
+          <div key={field.name} className="flex flex-col gap-1.5">
+            <label htmlFor={field.name} className="text-sm text-muted">
+              {field.label}
+            </label>
+            <input
+              id={field.name}
+              name={field.name}
+              inputMode="numeric"
+              autoComplete="off"
+              required
+              // Kept across a failed login, like the username.
+              defaultValue={state[field.name] ?? ""}
+              className="rounded-lg border border-line bg-surface px-4 py-3 outline-none focus:border-brand"
+            />
+          </div>
+        ))}
+      </fieldset>
+
       {state.error ? (
         <p
           role="alert"

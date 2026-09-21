@@ -14,6 +14,13 @@ import { missingLoginVars } from "@/lib/buzzebees/config";
 export type LoginState = {
   error?: string;
   /**
+   * The till fields are echoed back with the username so a failed login does
+   * not make the operator retype them. Only the password is withheld.
+   */
+  terminalId?: string;
+  branchId?: string;
+  brandId?: string;
+  /**
    * Echoed back so the field survives the re-render — React resets the form
    * after a Server Action, which would otherwise clear it on every failure.
    * The password is deliberately never echoed.
@@ -38,17 +45,30 @@ export async function login(
 ): Promise<LoginState> {
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const terminalId = String(formData.get("terminalId") ?? "").trim();
+  const branchId = String(formData.get("branchId") ?? "").trim();
+  const brandId = String(formData.get("brandId") ?? "").trim();
   const next = safeRedirectTarget(formData.get("next"));
 
+  // Echoed back on every early return below.
+  const entered = { username, terminalId, branchId, brandId };
+
   if (!username || !password) {
-    return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน", username };
+    return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน", ...entered };
+  }
+
+  if (!terminalId || !branchId || !brandId) {
+    return {
+      error: "กรุณากรอก Terminal ID, Branch ID และ Brand ID",
+      ...entered,
+    };
   }
 
   const missingConfig = missingLoginVars();
   if (missingConfig.length > 0) {
     return {
       error: `ยังไม่ได้ตั้งค่าการเชื่อมต่อ Buzzebees (${missingConfig.join(", ")}) — ดูวิธีตั้งค่าที่ README`,
-      username,
+      ...entered,
     };
   }
 
@@ -58,14 +78,18 @@ export async function login(
     const minutes = Math.ceil(limit.retryAfterSeconds / 60);
     return {
       error: `พยายามเข้าสู่ระบบผิดหลายครั้งเกินไป กรุณารออีก ${minutes} นาที`,
-      username,
+      ...entered,
     };
   }
 
   // Credentials are checked by Buzzebees, not against any local list.
   let operator;
   try {
-    operator = await operatorLogin(username, password);
+    operator = await operatorLogin(username, password, {
+      terminalId,
+      branchId,
+      brandId,
+    });
   } catch (error) {
     // A login the service could not answer is not the operator's fault, so it
     // neither counts against the throttle nor reports a wrong password.
@@ -76,7 +100,7 @@ export async function login(
       );
       return {
         error: "ไม่สามารถเชื่อมต่อระบบยืนยันตัวตนได้ กรุณาลองใหม่อีกครั้ง",
-        username,
+        ...entered,
       };
     }
     throw error;
@@ -84,11 +108,17 @@ export async function login(
 
   if (!operator) {
     recordFailedLogin(throttleKey);
-    return { error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง", username };
+    return { error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง", ...entered };
   }
 
   clearLoginAttempts(throttleKey);
-  await createSession({ sub: operator.username, name: operator.name });
+  await createSession({
+    sub: operator.username,
+    name: operator.name,
+    terminalId,
+    branchId,
+    brandId,
+  });
 
   redirect(next);
 }
