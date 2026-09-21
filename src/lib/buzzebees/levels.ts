@@ -2,6 +2,12 @@ import "server-only";
 
 import { buzzebeesFetch } from "@/lib/buzzebees/client";
 import { agencyId, appId, crmPlusBaseUrl } from "@/lib/buzzebees/config";
+import {
+  firstNumber,
+  firstString,
+  isRecord,
+  unwrapArray,
+} from "@/lib/buzzebees/payload";
 
 /**
  * The member levels available to an agency, from
@@ -27,32 +33,6 @@ const NAME_KEYS = ["levelName", "level_name", "name", "code", "levelCode"];
 /** Keys the numeric id might arrive under. */
 const ID_KEYS = ["levelId", "level_id", "id"];
 
-/** Keys a wrapper object might nest the array under. */
-const ARRAY_KEYS = ["levels", "data", "items", "result", "results"];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function firstString(row: Record<string, unknown>, keys: string[]): string | null {
-  for (const key of keys) {
-    const value = row[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return null;
-}
-
-function firstNumber(row: Record<string, unknown>, keys: string[]): number | null {
-  for (const key of keys) {
-    const value = row[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) {
-      return Number(value);
-    }
-  }
-  return null;
-}
-
 /**
  * Pulls the level list out of a response whose shape is not yet confirmed.
  *
@@ -62,22 +42,9 @@ function firstNumber(row: Record<string, unknown>, keys: string[]): number | nul
  * still has `raw` to fall back on.
  */
 export function extractLevels(json: unknown): CrmPlusLevel[] {
-  let rows: unknown = json;
-
-  if (isRecord(json)) {
-    for (const key of ARRAY_KEYS) {
-      if (Array.isArray(json[key])) {
-        rows = json[key];
-        break;
-      }
-    }
-  }
-
-  if (!Array.isArray(rows)) return [];
-
   const levels: CrmPlusLevel[] = [];
 
-  for (const row of rows) {
+  for (const row of unwrapArray(json)) {
     // A plain array of strings is a valid shape too.
     if (typeof row === "string" && row.trim()) {
       levels.push({ name: row.trim(), id: null });
