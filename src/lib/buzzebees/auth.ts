@@ -7,6 +7,7 @@ import {
   operatorLoginPath,
   secretValues,
 } from "@/lib/buzzebees/config";
+import { logCurl } from "@/lib/buzzebees/curl-log";
 
 /**
  * Merchant authentication against `POST /merchant/login`.
@@ -102,9 +103,18 @@ async function performLogin(
     form.append(field, value);
   }
 
+  const url = `${merchantBaseUrl()}${path}`;
+
+  logCurl(`POST ${path}`, {
+    method: "POST",
+    url,
+    headers: { "app-id": appId() },
+    form: fields,
+  }, [...extraSecrets, ...secretValues()]);
+
   let response: Response;
   try {
-    response = await fetch(`${merchantBaseUrl()}${path}`, {
+    response = await fetch(url, {
       method: "POST",
       // Content-Type is intentionally omitted: fetch derives it from the
       // FormData body along with the multipart boundary. Setting it by hand

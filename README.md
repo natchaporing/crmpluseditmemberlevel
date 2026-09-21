@@ -105,6 +105,29 @@ Any other failure (unreachable service, `404` from a misconfigured
 logged server-side with the status and body, and does **not** count against
 the throttle — so a misconfigured deploy cannot masquerade as a typo.
 
+### Debugging against the live API
+
+Set `BUZZEBEES_LOG_CURL` to `1`, `true`, `yes` or `on` and every outgoing
+Buzzebees request is echoed to the console as a `curl` command — the login
+POST and the authenticated API calls alike:
+
+```
+[buzzebees:curl] POST /merchant/login (credentials masked)
+curl -X POST 'https://api1servicewallet.buzzebees.com/merchant/login' \
+  -H 'app-id: app-test' \
+  -F 'username=somchai' \
+  -F 'password=***' \
+  -F 'terminalid=T-77' \
+  -F 'branchid=B-42' \
+  -F 'brandid=BR-9'
+```
+
+Passwords, `Authorization` headers and other credential fields are masked;
+fill them in by hand before replaying. The masking is deliberate — the shape
+of a request is what needs confirming, and a password written to a log outlives
+the debugging session in whatever collects stdout. Anything other than those
+four values, including unset, keeps the logging off.
+
 Three things to know before deploying:
 
 - The exact request and response shape of the login endpoint has **not been
@@ -147,6 +170,7 @@ The server reads `PORT` and `HOSTNAME` at startup; the image defaults to
 | `BUZZEBEES_BRANCH_ID` | Service-account branch id |
 | `BUZZEBEES_BRAND_ID` | Service-account brand id |
 | `BUZZEBEES_LOGIN_PATH` | Optional — operator login endpoint, defaults to `/merchant/login` |
+| `BUZZEBEES_LOG_CURL` | Optional — log outgoing requests as curl commands |
 
 None are needed at build time: every route that reads them is rendered on
 demand, so the image itself holds no secrets.

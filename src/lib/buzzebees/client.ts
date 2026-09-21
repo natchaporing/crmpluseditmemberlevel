@@ -5,6 +5,7 @@ import {
   getMerchantToken,
   invalidateMerchantToken,
 } from "@/lib/buzzebees/auth";
+import { logCurl } from "@/lib/buzzebees/curl-log";
 
 /** Error bodies are echoed for debugging, but only a bounded prefix. */
 const MAX_BODY_SNIPPET = 500;
@@ -81,13 +82,22 @@ async function send(
   init: RequestInit,
   token: string,
 ): Promise<Response> {
+  const headers = {
+    ...(init.headers as Record<string, string> | undefined),
+    Authorization: authorizationHeader(token),
+  };
+
+  logCurl(`${init.method ?? "GET"} ${url}`, {
+    method: init.method ?? "GET",
+    url,
+    headers,
+    body: typeof init.body === "string" ? init.body : undefined,
+  }, [token]);
+
   try {
     return await fetch(url, {
       ...init,
-      headers: {
-        ...init.headers,
-        Authorization: authorizationHeader(token),
-      },
+      headers,
       cache: "no-store",
     });
   } catch (cause) {
