@@ -32,6 +32,13 @@ export async function fetchPosProfile(
   }
   if (!isRecord(json)) return null;
 
+  // The profile arrives wrapped as { success, data }. Unwrapping here keeps
+  // every caller reading the customer rather than the envelope around it — but
+  // a bare profile is accepted too, since the wrapper is not guaranteed.
+  const inner = json.data;
+  if (isRecord(inner)) return inner;
+  if (Array.isArray(inner) && isRecord(inner[0])) return inner[0];
+
   return json;
 }
 

@@ -15,3 +15,8 @@ export function findLevel(code: string): MemberLevel | undefined {
 export function levelId(code: string): number | null {
   return findLevel(code)?.id ?? null;
 }
+
+/** The level whose numeric id the CRM sent, e.g. `UserLevel: 1` → `Member`. */
+export function levelCodeById(id: number): string | null {
+  return MEMBER_LEVELS.find((level) => level.id === id)?.code ?? null;
+}

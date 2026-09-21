@@ -1,20 +1,25 @@
 import "server-only";
 
-import { firstNumber, firstString } from "@/lib/buzzebees/payload";
+import { firstNumber, firstString, isRecord } from "@/lib/buzzebees/payload";
 import { fetchPosProfile } from "@/lib/buzzebees/profile";
-import { findLevel } from "@/lib/members/levels";
+import { findLevel, levelCodeById } from "@/lib/members/levels";
 import { store } from "@/lib/members/store";
 import type { LevelChange, Member } from "@/lib/members/types";
 
 /**
- * Field names the CRM might use. `/pos/profile` has not been pinned down field
- * by field, so each one is read under its usual spellings and whatever is not
- * recognised still reaches the UI through `raw`.
+ * Field names the CRM uses, with the usual variants alongside.
+ *
+ * The live payload is PascalCase (`FirstName`, `Contact_Number`), but the
+ * camelCase spellings are kept so a differently-cased response still reads.
  */
-const USER_ID_KEYS = ["userId", "user_id", "userID", "memberId", "id"];
-const FIRST_NAME_KEYS = ["firstName", "first_name", "firstname", "fname"];
-const LAST_NAME_KEYS = ["lastName", "last_name", "lastname", "lname"];
+const USER_ID_KEYS = ["UserId", "userId", "user_id", "userID", "memberId", "id"];
+const FIRST_NAME_KEYS = ["FirstName", "firstName", "first_name", "firstname"];
+const LAST_NAME_KEYS = ["LastName", "lastName", "last_name", "lastname"];
+/** Used only when the name is not split into two fields. */
+const FULL_NAME_KEYS = ["Name", "DisplayName", "displayName", "name", "fullName"];
 const CONTACT_KEYS = [
+  "Contact_Number",
+  "ContactNumber",
   "contactNumber",
   "contact_number",
   "contactnumber",
@@ -22,13 +27,48 @@ const CONTACT_KEYS = [
   "phone",
   "msisdn",
 ];
-const POINT_KEYS = ["point", "points", "pointBalance", "balance"];
-const LEVEL_KEYS = ["levelName", "level_name", "level", "levelCode", "memberLevel"];
+const POINT_KEYS = ["Point", "point", "Points", "points", "pointBalance", "balance"];
+/** The level as a name, where the CRM sends one instead of a numeric id. */
+const LEVEL_NAME_KEYS = ["LevelName", "levelName", "level_name", "levelCode", "level"];
+/** The level as the CRM's numeric id, e.g. `UserLevel: 1`. */
+const LEVEL_ID_KEYS = ["UserLevel", "userLevel", "user_level", "levelId", "level_id"];
 
-/** Scalar fields of the payload, for the "ข้อมูลที่ส่งไปพร้อมกัน" list. */
-function scalarAttributes(
-  raw: Record<string, unknown>,
-): Member["attributes"] {
+/**
+ * Points live under `updated_points.points` rather than at the top level, so
+ * the nested object is searched before falling back to a flat field.
+ */
+function readPoint(raw: Record<string, unknown>): number {
+  const updated = raw.updated_points ?? raw.updatedPoints;
+  if (isRecord(updated)) {
+    const nested = firstNumber(updated, ["points", "point"]);
+    if (nested !== null) return nested;
+  }
+
+  return firstNumber(raw, POINT_KEYS) ?? 0;
+}
+
+/**
+ * The member level, preferring a name the CRM sends outright and otherwise
+ * resolving its numeric id against `MEMBER_LEVELS`. An id with no matching
+ * level yields an empty code rather than a guess, so the badge shows nothing
+ * instead of the wrong level.
+ */
+function readLevelCode(raw: Record<string, unknown>): string {
+  const named = firstString(raw, LEVEL_NAME_KEYS);
+  if (named) return named;
+
+  const id = firstNumber(raw, LEVEL_ID_KEYS);
+  if (id !== null) return levelCodeById(id) ?? "";
+
+  return "";
+}
+
+/**
+ * Scalar fields of the payload, for the "ข้อมูลที่ส่งไปพร้อมกัน" list. Nested
+ * objects are left out: they would render as [object Object], and the raw JSON
+ * below the list already shows them in full.
+ */
+function scalarAttributes(raw: Record<string, unknown>): Member["attributes"] {
   const attributes: Member["attributes"] = {};
 
   for (const [key, value] of Object.entries(raw)) {
@@ -46,13 +86,20 @@ function scalarAttributes(
 }
 
 function toMember(raw: Record<string, unknown>, phone: string): Member {
+  const first = firstString(raw, FIRST_NAME_KEYS);
+  const last = firstString(raw, LAST_NAME_KEYS);
+  // Fall back to a single name field, split on the first space, so the card
+  // has something to show when the CRM does not send the parts separately.
+  const full = firstString(raw, FULL_NAME_KEYS) ?? "";
+  const [fallbackFirst, ...fallbackRest] = full.split(" ");
+
   return {
     userId: firstString(raw, USER_ID_KEYS) ?? "",
-    firstName: firstString(raw, FIRST_NAME_KEYS) ?? "",
-    lastName: firstString(raw, LAST_NAME_KEYS) ?? "",
+    firstName: first ?? fallbackFirst ?? "",
+    lastName: last ?? fallbackRest.join(" "),
     contactNumber: firstString(raw, CONTACT_KEYS) ?? phone,
-    point: firstNumber(raw, POINT_KEYS) ?? 0,
-    levelCode: firstString(raw, LEVEL_KEYS) ?? "",
+    point: readPoint(raw),
+    levelCode: readLevelCode(raw),
     attributes: scalarAttributes(raw),
     raw,
   };
