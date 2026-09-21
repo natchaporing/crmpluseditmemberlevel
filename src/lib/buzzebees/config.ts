@@ -44,6 +44,16 @@ export function crmPlusBaseUrl(): string {
   );
 }
 
+/**
+ * The tenant whose members and levels this deployment manages.
+ *
+ * Sent as `agencyId` when listing levels, and carried on every profile the
+ * update endpoint writes back.
+ */
+export function agencyId(): string {
+  return required("BUZZEBEES_AGENCY_ID");
+}
+
 export function appId(): string {
   return required("BUZZEBEES_APP_ID");
 }

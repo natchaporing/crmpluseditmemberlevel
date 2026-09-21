@@ -171,6 +171,7 @@ The server reads `PORT` and `HOSTNAME` at startup; the image defaults to
 | `BUZZEBEES_BRAND_ID` | Service-account brand id |
 | `BUZZEBEES_LOGIN_PATH` | Optional — operator login endpoint, defaults to `/merchant/login` |
 | `BUZZEBEES_LOG_CURL` | Optional — log outgoing requests as curl commands |
+| `BUZZEBEES_AGENCY_ID` | Agency (tenant) whose members and levels this deployment manages |
 | `BUZZEBEES_CRMPLUS_BASE_URL` | Optional — CRM Plus back office, defaults to the production host |
 
 None are needed at build time: every route that reads them is rendered on
