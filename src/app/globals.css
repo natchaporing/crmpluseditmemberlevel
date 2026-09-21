@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/*
+ * The CRM tool is a light-only internal console, matching the Buzzebees
+ * brand: near-black surfaces for primary actions, orange for confirmation.
+ */
+:root {
+  color-scheme: light;
+
+  --background: #f2f0eb;
+  --foreground: #16161a;
+  --surface: #ffffff;
+  --muted: #6b6b70;
+  --border: #e2ded4;
+  --brand: #f5921e;
+  --brand-strong: #e07d0a;
+  --brand-soft: #fdefd9;
+  --ink: #16161a;
+  --success: #15803d;
+  --success-soft: #dcfce7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-line: var(--border);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-ink: var(--ink);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --font-sans: var(--font-thai-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Keyboard focus stays visible on every interactive element. */
+:where(a, button, input, select, summary):focus-visible {
+  outline: 2px solid var(--brand-strong);
+  outline-offset: 2px;
+}

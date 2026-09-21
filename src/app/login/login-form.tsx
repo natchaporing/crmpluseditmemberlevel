@@ -1,0 +1,72 @@
+"use client";
+
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
+
+import { login, type LoginState } from "@/app/actions/auth";
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="w-full rounded-lg bg-ink px-4 py-3 font-bold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+    >
+      {pending ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ"}
+    </button>
+  );
+}
+
+export function LoginForm({ next }: { next: string }) {
+  const [state, formAction] = useActionState<LoginState, FormData>(login, {});
+
+  return (
+    <form action={formAction} className="flex flex-col gap-4">
+      <input type="hidden" name="next" value={next} />
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="username" className="text-sm text-muted">
+          ชื่อผู้ใช้
+        </label>
+        <input
+          id="username"
+          name="username"
+          autoComplete="username"
+          autoFocus
+          required
+          // React resets the form after each submission; this keeps the
+          // username in place when a login fails.
+          defaultValue={state.username ?? ""}
+          className="rounded-lg border border-line bg-surface px-4 py-3 outline-none focus:border-brand"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="password" className="text-sm text-muted">
+          รหัสผ่าน
+        </label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+          className="rounded-lg border border-line bg-surface px-4 py-3 outline-none focus:border-brand"
+        />
+      </div>
+
+      {state.error ? (
+        <p
+          role="alert"
+          className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700"
+        >
+          {state.error}
+        </p>
+      ) : null}
+
+      <SubmitButton />
+    </form>
+  );
+}
