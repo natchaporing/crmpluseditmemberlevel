@@ -150,6 +150,22 @@ Three things to know before deploying:
 - Sessions are stateless. Rotating `SESSION_SECRET` signs everyone out, but
   there is no way to revoke a single session before it expires.
 
+## Activity log
+
+Every sign-in, sign-out, search and level change is recorded by this app, as
+one JSON object per line in `activity.jsonl`. The history tab reads its level
+changes from it; the rest is there for whoever needs to explain what happened.
+
+**Point `ACTIVITY_LOG_DIR` at a mounted volume.** A container's filesystem is
+replaced on every deploy, so anywhere else the log is lost each time the app
+ships. Writing is best-effort by design: a log that cannot be written is
+reported to the console and held in memory, because an operator's level change
+should not fail over it.
+
+Entries record the operator, their till, the customer and the levels involved.
+A failed login records the username that was typed; passwords are never
+written.
+
 ## Deploying
 
 The app builds to a Docker image via the root `Dockerfile` — a multi-stage
@@ -173,6 +189,7 @@ The server reads `PORT` and `HOSTNAME` at startup; the image defaults to
 | Variable | |
 | --- | --- |
 | `SESSION_SECRET` | Random, 32+ characters |
+| `ACTIVITY_LOG_DIR` | Where the activity log is written — point at a mounted volume |
 | `BUZZEBEES_APP_ID` | Merchant API app id — the only one login needs |
 | `BUZZEBEES_LOGIN_PATH` | Optional — wallet login endpoint, defaults to `/merchant/login` |
 | `BUZZEBEES_SSO_BASE_URL` | Single sign-on host — required, never defaulted, since sign-ins post credentials to it |

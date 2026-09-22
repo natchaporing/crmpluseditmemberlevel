@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { LevelChange, Member } from "@/lib/members/types";
+import type { Member } from "@/lib/members/types";
 
 /**
  * Placeholder data source.
@@ -138,7 +138,6 @@ function seedMembers(): Member[] {
 
 type Store = {
   members: Member[];
-  history: LevelChange[];
 };
 
 const globalForStore = globalThis as unknown as {
@@ -148,5 +147,4 @@ const globalForStore = globalThis as unknown as {
 // Survive dev-server hot reloads so edits don't wipe in-flight test data.
 export const store: Store = (globalForStore.__crmplusStore ??= {
   members: seedMembers(),
-  history: [],
 });

@@ -1,5 +1,6 @@
 "use server";
 
+import { recordActivity, readActivity } from "@/lib/activity/log";
 import { requireSession } from "@/lib/auth/dal";
 import { BuzzebeesAuthError } from "@/lib/buzzebees/auth";
 import { BuzzebeesApiError } from "@/lib/buzzebees/client";
@@ -8,7 +9,6 @@ import {
   changeMemberLevel,
   findMemberByPhone,
   isValidPhone,
-  listHistory,
 } from "@/lib/members/service";
 import type { LevelChange, Member } from "@/lib/members/types";
 
@@ -41,6 +41,16 @@ export async function searchMember(phone: string): Promise<SearchResult> {
         status: error.status,
         body: error.body,
       });
+      await recordActivity({
+        operator: session.sub,
+        action: "search",
+        outcome: "failure",
+        terminalId: session.terminalId,
+        branchId: session.branchId,
+        brandId: session.brandId,
+        contactNumber: trimmed,
+        detail: `CRM unreachable: ${error.message}`,
+      });
       return {
         status: "error",
         message: "ไม่สามารถเชื่อมต่อระบบ CRM ได้ กรุณาลองใหม่อีกครั้ง",
@@ -48,6 +58,21 @@ export async function searchMember(phone: string): Promise<SearchResult> {
     }
     throw error;
   }
+
+  await recordActivity({
+    operator: session.sub,
+    action: "search",
+    outcome: member ? "success" : "failure",
+    terminalId: session.terminalId,
+    branchId: session.branchId,
+    brandId: session.brandId,
+    contactNumber: trimmed,
+    memberName: member
+      ? `${member.firstName} ${member.lastName}`.trim()
+      : undefined,
+    userId: member?.userId,
+    detail: member ? undefined : "ไม่พบลูกค้า",
+  });
 
   return member ? { status: "found", member } : { status: "not-found", phone: trimmed };
 }
@@ -84,6 +109,17 @@ export async function saveMemberLevel(
         status: error.status,
         body: error.body,
       });
+      await recordActivity({
+        operator: session.sub,
+        action: "level-change",
+        outcome: "failure",
+        terminalId: session.terminalId,
+        branchId: session.branchId,
+        brandId: session.brandId,
+        contactNumber: phone,
+        toLevelCode,
+        detail: `${error.name} ${error.status}: ${error.message}`,
+      });
       return {
         status: "error",
         message: "บันทึก Level ไม่สำเร็จ — ระบบ CRM ปฏิเสธหรือเชื่อมต่อไม่ได้ กรุณาลองใหม่",
@@ -99,6 +135,20 @@ export async function saveMemberLevel(
   }
 
   if (result.ok) {
+    await recordActivity({
+      operator: session.sub,
+      action: "level-change",
+      outcome: "success",
+      terminalId: session.terminalId,
+      branchId: session.branchId,
+      brandId: session.brandId,
+      contactNumber: result.member.contactNumber,
+      memberName: `${result.member.firstName} ${result.member.lastName}`.trim(),
+      userId: result.member.userId,
+      fromLevelCode: result.fromLevelCode,
+      toLevelCode: result.toLevelCode,
+    });
+
     return {
       status: "saved",
       member: result.member,
@@ -116,10 +166,40 @@ export async function saveMemberLevel(
       "เข้าสู่ระบบ CRM (SSO) ไม่สำเร็จ จึงยังบันทึก Level ไม่ได้ — กรุณาออกจากระบบแล้วเข้าใหม่",
   };
 
+  await recordActivity({
+    operator: session.sub,
+    action: "level-change",
+    outcome: "failure",
+    terminalId: session.terminalId,
+    branchId: session.branchId,
+    brandId: session.brandId,
+    contactNumber: phone,
+    toLevelCode,
+    detail: result.error,
+  });
+
   return { status: "error", message: messages[result.error] };
 }
 
+/**
+ * The level changes from the activity log.
+ *
+ * The log holds every action; this tab is the edit history, so it shows the
+ * level changes. Everything else is on the server for whoever needs it.
+ */
 export async function getHistory(): Promise<LevelChange[]> {
   await requireSession();
-  return listHistory();
+
+  const entries = await readActivity({ action: "level-change", limit: 50 });
+
+  return entries.map((entry) => ({
+    id: entry.id,
+    changedAt: entry.at,
+    changedBy: entry.operator,
+    memberName: entry.memberName ?? "",
+    contactNumber: entry.contactNumber ?? "",
+    fromLevelCode: entry.fromLevelCode ?? "",
+    toLevelCode: entry.toLevelCode ?? "",
+    status: entry.outcome === "success" ? "success" : "failed",
+  }));
 }

@@ -3,11 +3,8 @@ import "server-only";
 import { firstNumber, firstString, isRecord } from "@/lib/buzzebees/payload";
 import { fetchPosProfile } from "@/lib/buzzebees/profile";
 import { updateMemberLevel } from "@/lib/buzzebees/user";
-import { randomUUID } from "node:crypto";
-
 import { findLevel, levelCodeById } from "@/lib/members/levels";
-import { store } from "@/lib/members/store";
-import type { LevelChange, Member } from "@/lib/members/types";
+import type { Member } from "@/lib/members/types";
 
 /**
  * Field names the CRM uses, with the usual variants alongside.
@@ -176,19 +173,6 @@ export async function changeMemberLevel(options: {
     options.ssoToken,
   );
 
-  // The CRM keeps its own log; this one covers the operator's own session, so
-  // the history tab shows what they just did without a second round trip.
-  store.history.unshift({
-    id: randomUUID(),
-    changedAt: new Date().toISOString(),
-    changedBy: options.changedBy,
-    memberName: `${member.firstName} ${member.lastName}`.trim(),
-    contactNumber: member.contactNumber,
-    fromLevelCode,
-    toLevelCode: target.code,
-    status: "success",
-  });
-
   return {
     ok: true,
     member: { ...member, levelCode: target.code },
@@ -197,6 +181,3 @@ export async function changeMemberLevel(options: {
   };
 }
 
-export async function listHistory(limit = 50): Promise<LevelChange[]> {
-  return store.history.slice(0, limit);
-}

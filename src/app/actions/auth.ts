@@ -7,8 +7,9 @@ import {
   clearLoginAttempts,
   recordFailedLogin,
 } from "@/lib/auth/rate-limit";
+import { recordActivity } from "@/lib/activity/log";
 import { rememberPos } from "@/lib/auth/pos-cookie";
-import { createSession, destroySession } from "@/lib/auth/session";
+import { createSession, destroySession, readSession } from "@/lib/auth/session";
 import { BuzzebeesAuthError, operatorLogin } from "@/lib/buzzebees/auth";
 import { missingLoginVars } from "@/lib/buzzebees/config";
 
@@ -121,6 +122,15 @@ export async function login(
 
   if (!operator) {
     recordFailedLogin(throttleKey);
+    await recordActivity({
+      operator: username,
+      action: "login",
+      outcome: "failure",
+      terminalId,
+      branchId,
+      brandId,
+      detail: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
+    });
     return { error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง", ...entered };
   }
 
@@ -136,6 +146,17 @@ export async function login(
     agencyId: operator.agencyId ?? "",
   });
 
+  await recordActivity({
+    operator: operator.username,
+    action: "login",
+    outcome: "success",
+    terminalId,
+    branchId,
+    brandId,
+    // Worth knowing: without it a level change cannot be saved.
+    detail: operator.ssoToken ? undefined : "single sign-on unavailable",
+  });
+
   // Outlives the session, so the next sign-in at this till starts pre-filled.
   await rememberPos({ terminalId, branchId, brandId });
 
@@ -143,6 +164,18 @@ export async function login(
 }
 
 export async function logout(): Promise<void> {
+  const session = await readSession();
+  if (session) {
+    await recordActivity({
+      operator: session.sub,
+      action: "logout",
+      outcome: "success",
+      terminalId: session.terminalId,
+      branchId: session.branchId,
+      brandId: session.brandId,
+    });
+  }
+
   await destroySession();
   redirect("/login");
 }
