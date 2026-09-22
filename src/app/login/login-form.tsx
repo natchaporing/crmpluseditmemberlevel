@@ -19,20 +19,7 @@ function SubmitButton() {
   );
 }
 
-/** Mirrors `PosCookie`, redeclared so this client file imports no server module. */
-type PosDefaults = {
-  terminalId: string;
-  branchId: string;
-  brandId: string;
-};
-
-export function LoginForm({
-  next,
-  remembered,
-}: {
-  next: string;
-  remembered: PosDefaults | null;
-}) {
+export function LoginForm({ next }: { next: string }) {
   const [state, formAction] = useActionState<LoginState, FormData>(login, {});
 
   return (
@@ -69,35 +56,6 @@ export function LoginForm({
           className="rounded-lg border border-line bg-surface px-4 py-3 outline-none focus:border-brand"
         />
       </div>
-
-      <fieldset className="flex flex-col gap-4 rounded-lg border border-line p-4">
-        <legend className="px-1 text-sm text-muted">จุดขาย</legend>
-
-        {(
-          [
-            { name: "terminalId", label: "Terminal ID" },
-            { name: "branchId", label: "Branch ID" },
-            { name: "brandId", label: "Brand ID" },
-          ] as const
-        ).map((field) => (
-          <div key={field.name} className="flex flex-col gap-1.5">
-            <label htmlFor={field.name} className="text-sm text-muted">
-              {field.label}
-            </label>
-            <input
-              id={field.name}
-              name={field.name}
-              inputMode="numeric"
-              autoComplete="off"
-              required
-              // What was just typed wins; otherwise the till remembered from
-              // the last successful login here.
-              defaultValue={state[field.name] ?? remembered?.[field.name] ?? ""}
-              className="rounded-lg border border-line bg-surface px-4 py-3 outline-none focus:border-brand"
-            />
-          </div>
-        ))}
-      </fieldset>
 
       {state.error ? (
         <p

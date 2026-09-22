@@ -50,24 +50,13 @@ openssl rand -base64 48
 
 ### Operator login
 
-The login form asks for five things: username, password, Terminal ID, Branch
-ID and Brand ID. All five are typed by the operator and posted to Buzzebees as
+The login form asks for a username and a password, posted to Buzzebees as
 `multipart/form-data`. A reply carrying a token means the operator is who they
-say they are; the token confirms identity and is not stored in the session
-cookie.
+say they are.
 
-The till values are **not** environment configuration — the same deployment
-serves operators at different terminals, so they are entered per sign-in and
-carried in the session cookie afterwards, which is why the app does not ask
-again on every action.
-
-A successful login also writes the till to a second cookie, `crmplus_pos`,
-which outlives the session. Signing in again at the same terminal finds the
-three fields already filled; only the username and password have to be typed.
-It stores no credentials, is `HttpOnly` like the session (the login page is
-server-rendered and fills the form in itself), and lasts 180 days. Logging out
-deliberately leaves it in place — that is the point of it. It is per browser,
-so a different machine starts from empty fields.
+It used to ask for a Terminal, Branch and Brand ID as well, and remember them
+in a `crmplus_pos` cookie. Single sign-on takes none of them, so the fields are
+gone; the next login clears the cookie from browsers that still hold one.
 
 Signing in is one call. `POST /auth/bzbs_login` returns two tokens: `token`,
 which the CRM Plus endpoints accept, and `ewallet_token`, which customer
@@ -96,8 +85,7 @@ anywhere — only the app id and the agency.
 | Concern | Where |
 | --- | --- |
 | Credential check | `POST` to the configured Buzzebees login endpoint — `src/lib/buzzebees/auth.ts` |
-| Session | HS256 JWT in an `HttpOnly`, `SameSite=Lax` cookie, 8-hour expiry, `Secure` in production; carries the operator and their till — `src/lib/auth/session.ts` |
-| Remembered till | `crmplus_pos`, `HttpOnly`, 180 days, written on a successful login to pre-fill the form — `src/lib/auth/pos-cookie.ts` |
+| Session | HS256 JWT in an `HttpOnly`, `SameSite=Lax` cookie, 8-hour expiry, `Secure` in production; carries the operator, their tokens and their agency — `src/lib/auth/session.ts` |
 | Route gating | `src/proxy.ts` verifies the cookie signature and redirects to `/login` |
 | Authoritative check | `requireSession()` re-checks in every page and Server Action — `src/lib/auth/dal.ts` |
 | Brute-force throttle | 5 failed attempts per username per 10 minutes — `src/lib/auth/rate-limit.ts` |
@@ -160,9 +148,8 @@ ships. Writing is best-effort by design: a log that cannot be written is
 reported to the console and held in memory, because an operator's level change
 should not fail over it.
 
-Entries record the operator, their till, the customer and the levels involved.
-A failed login records the username that was typed; passwords are never
-written.
+Entries record the operator, the customer and the levels involved. A failed
+login records the username that was typed; passwords are never written.
 
 ## Deploying
 

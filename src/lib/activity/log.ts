@@ -31,10 +31,6 @@ export type ActivityEntry = {
   operator: string;
   action: ActivityAction;
   outcome: "success" | "failure";
-  /** The till they were signed in at. */
-  terminalId?: string;
-  branchId?: string;
-  brandId?: string;
   contactNumber?: string;
   memberName?: string;
   userId?: string;
