@@ -8,7 +8,7 @@ import {
   recordFailedLogin,
 } from "@/lib/auth/rate-limit";
 import { recordActivity } from "@/lib/activity/log";
-import { forgetPos } from "@/lib/auth/pos-cookie";
+import { rememberPos } from "@/lib/auth/pos-cookie";
 import { createSession, destroySession, readSession } from "@/lib/auth/session";
 import { BuzzebeesAuthError, operatorLogin } from "@/lib/buzzebees/auth";
 import { missingLoginVars } from "@/lib/buzzebees/config";
@@ -16,12 +16,22 @@ import { missingLoginVars } from "@/lib/buzzebees/config";
 export type LoginState = {
   error?: string;
   /**
+   * The till fields are echoed back with the username so a failed login does
+   * not make the operator retype them. Only the password is withheld.
+   */
+  terminalId?: string;
+  branchId?: string;
+  brandId?: string;
+  /**
    * Echoed back so the field survives the re-render — React resets the form
    * after a Server Action, which would otherwise clear it on every failure.
    * The password is deliberately never echoed.
    */
   username?: string;
 };
+
+/** Longest accepted Terminal, Branch or Brand ID. */
+const MAX_POS_FIELD = 64;
 
 /**
  * Only same-origin paths are accepted, so a crafted `?next=` cannot turn the
@@ -40,13 +50,32 @@ export async function login(
 ): Promise<LoginState> {
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const terminalId = String(formData.get("terminalId") ?? "").trim();
+  const branchId = String(formData.get("branchId") ?? "").trim();
+  const brandId = String(formData.get("brandId") ?? "").trim();
   const next = safeRedirectTarget(formData.get("next"));
 
   // Echoed back on every early return below.
-  const entered = { username };
+  const entered = { username, terminalId, branchId, brandId };
 
   if (!username || !password) {
     return { error: "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน", ...entered };
+  }
+
+  if (!terminalId || !branchId || !brandId) {
+    return {
+      error: "กรุณากรอก Terminal ID, Branch ID และ Brand ID",
+      ...entered,
+    };
+  }
+
+  // These are short identifiers. Capping them keeps a pasted essay out of the
+  // login request and out of the cookie that remembers the till.
+  if ([terminalId, branchId, brandId].some((v) => v.length > MAX_POS_FIELD)) {
+    return {
+      error: `Terminal ID, Branch ID และ Brand ID ต้องยาวไม่เกิน ${MAX_POS_FIELD} ตัวอักษร`,
+      ...entered,
+    };
   }
 
   const missingConfig = missingLoginVars();
@@ -70,7 +99,11 @@ export async function login(
   // Credentials are checked by Buzzebees, not against any local list.
   let operator;
   try {
-    operator = await operatorLogin(username, password);
+    operator = await operatorLogin(username, password, {
+      terminalId,
+      branchId,
+      brandId,
+    });
   } catch (error) {
     // A login the service could not answer is not the operator's fault, so it
     // neither counts against the throttle nor reports a wrong password.
@@ -93,6 +126,9 @@ export async function login(
       operator: username,
       action: "login",
       outcome: "failure",
+      terminalId,
+      branchId,
+      brandId,
       detail: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
     });
     return { error: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง", ...entered };
@@ -102,6 +138,9 @@ export async function login(
   await createSession({
     sub: operator.username,
     name: operator.name,
+    terminalId,
+    branchId,
+    brandId,
     token: operator.token,
     ssoToken: operator.ssoToken,
     agencyId: operator.agencyId ?? "",
@@ -111,14 +150,15 @@ export async function login(
     operator: operator.username,
     action: "login",
     outcome: "success",
+    terminalId,
+    branchId,
+    brandId,
     // Worth knowing: without it a level change cannot be saved.
     detail: operator.ssoToken ? undefined : "single sign-on unavailable",
   });
 
-  // Nothing reads the till any more. Clearing it drops the cookie from
-  // browsers that were signing in before the fields were removed, rather than
-  // leaving them to send it for another six months.
-  await forgetPos();
+  // Outlives the session, so the next sign-in at this till starts pre-filled.
+  await rememberPos({ terminalId, branchId, brandId });
 
   redirect(next);
 }
@@ -130,6 +170,9 @@ export async function logout(): Promise<void> {
       operator: session.sub,
       action: "logout",
       outcome: "success",
+      terminalId: session.terminalId,
+      branchId: session.branchId,
+      brandId: session.brandId,
     });
   }
 

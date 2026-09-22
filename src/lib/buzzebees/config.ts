@@ -21,6 +21,14 @@ function required(name: string): string {
   return value;
 }
 
+/** Non-secret endpoints: overridable to point at staging, production default. */
+export function merchantBaseUrl(): string {
+  return (
+    process.env.BUZZEBEES_MERCHANT_BASE_URL?.trim() ||
+    "https://api1servicewallet.buzzebees.com"
+  );
+}
+
 export function stampWalletBaseUrl(): string {
   return (
     process.env.BUZZEBEES_STAMP_WALLET_BASE_URL?.trim() ||
@@ -74,9 +82,8 @@ export function agencyId(): string {
 /**
  * Single sign-on, which issues the token the CRM Plus endpoints accept.
  *
- * Signing in is a single call to this host: the reply carries the CRM Plus
- * token and the wallet token both, and the back office uses each for its own
- * set of endpoints.
+ * Signing in hits this alongside the wallet login: the two return different
+ * tokens, and the back office uses each for its own set of endpoints.
  *
  * Required rather than defaulted. Every sign-in posts an operator's real
  * credentials here, so the host is one to be chosen deliberately, not one this
@@ -87,7 +94,7 @@ export function ssoBaseUrl(): string {
   return required("BUZZEBEES_SSO_BASE_URL");
 }
 
-/** The single sign-on endpoint: a path, a whole URL, or a bare host. */
+/** As `BUZZEBEES_LOGIN_PATH`, but for single sign-on. */
 export function ssoLoginPath(): string {
   return process.env.BUZZEBEES_SSO_LOGIN_PATH?.trim() || "/auth/bzbs_login";
 }
@@ -112,6 +119,19 @@ export function missingBuzzebeesVars(): string[] {
   return REQUIRED_BUZZEBEES_VARS.filter(
     (name) => !process.env[name]?.trim(),
   );
+}
+
+/**
+ * Path of the endpoint that verifies an operator's credentials.
+ *
+ * Buzzebees exposes several login endpoints and which one authenticates
+ * operators differs per deployment, so this is configurable rather than
+ * hard-coded. A path is joined onto `merchantBaseUrl()`; a whole URL is used
+ * as given; and a bare host gets `/merchant/login` appended, since a host on
+ * its own is a base to send the login to rather than the endpoint itself.
+ */
+export function operatorLoginPath(): string {
+  return process.env.BUZZEBEES_LOGIN_PATH?.trim() || "/merchant/login";
 }
 
 /**

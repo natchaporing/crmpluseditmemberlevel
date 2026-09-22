@@ -16,6 +16,14 @@ export type SessionPayload = {
   /** Display name shown in the header. */
   name: string;
   /**
+   * The till the operator signed in at. Typed on the login form rather than
+   * configured per deployment, and carried in the session so the app knows
+   * where a level change happened without asking again on every action.
+   */
+  terminalId: string;
+  branchId: string;
+  brandId: string;
+  /**
    * The Buzzebees token from this operator's sign-in. Every lookup and update
    * they make travels with it, so it lives as long as their session does.
    */
@@ -52,6 +60,9 @@ function secretKey(): Uint8Array {
 export async function encryptSession(payload: SessionPayload): Promise<string> {
   return new SignJWT({
     name: payload.name,
+    terminalId: payload.terminalId,
+    branchId: payload.branchId,
+    brandId: payload.brandId,
     token: payload.token,
     ssoToken: payload.ssoToken,
     agencyId: payload.agencyId,
@@ -73,22 +84,36 @@ export async function decryptSession(
       algorithms: ["HS256"],
     });
 
-    const { sub, name, token: apiToken, ssoToken, agencyId } = payload;
+    const {
+      sub,
+      name,
+      terminalId,
+      branchId,
+      brandId,
+      token: apiToken,
+      ssoToken,
+      agencyId,
+    } = payload;
 
+    // A session minted before the till fields existed fails this check and is
+    // treated as signed out, which is the safe direction.
     if (
       typeof sub !== "string" ||
       typeof name !== "string" ||
+      typeof terminalId !== "string" ||
+      typeof branchId !== "string" ||
+      typeof brandId !== "string" ||
       typeof apiToken !== "string"
     ) {
       return null;
     }
 
-    // Sessions minted while the login form still asked for a till carry those
-    // claims too. They are ignored rather than rejected, so removing the
-    // fields does not sign everyone out mid-shift.
     return {
       sub,
       name,
+      terminalId,
+      branchId,
+      brandId,
       token: apiToken,
       // Both absent in sessions minted before they were carried; an empty
       // value degrades at the point of use rather than signing anyone out.

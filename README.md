@@ -50,28 +50,47 @@ openssl rand -base64 48
 
 ### Operator login
 
-The login form asks for a username and a password, posted to Buzzebees as
+The login form asks for five things: username, password, Terminal ID, Branch
+ID and Brand ID. All five are typed by the operator and posted to Buzzebees as
 `multipart/form-data`. A reply carrying a token means the operator is who they
 say they are.
 
-It used to ask for a Terminal, Branch and Brand ID as well, and remember them
-in a `crmplus_pos` cookie. Single sign-on takes none of them, so the fields are
-gone; the next login clears the cookie from browsers that still hold one.
+The till values are **not** environment configuration — the same deployment
+serves operators at different terminals, so they are entered per sign-in and
+carried in the session cookie afterwards, which is why the app does not ask
+again on every action.
 
-Signing in is one call. `POST /auth/bzbs_login` returns two tokens: `token`,
-which the CRM Plus endpoints accept, and `ewallet_token`, which customer
-lookups travel with. Both are held in the session.
+A successful login also writes the till to a second cookie, `crmplus_pos`,
+which outlives the session. Signing in again at the same terminal finds the
+three fields already filled; only the username and password have to be typed.
+It stores no credentials, is `HttpOnly` like the session (the login page is
+server-rendered and fills the form in itself), and lasts 180 days. Logging out
+deliberately leaves it in place — that is the point of it. It is per browser,
+so a different machine starts from empty fields.
 
-Which host serves that endpoint differs per deployment, so it is configured
-rather than fixed:
+Signing in performs **two** logins at once with the same credentials, as the
+back office does. `POST /merchant/login` returns the wallet token, which
+customer lookups travel with, and takes the till fields with the credentials;
+`POST /auth/bzbs_login` returns the single sign-on token, which the CRM Plus
+endpoints accept. Both are held in the session.
+
+Single sign-on failing does not cost the operator their sign-in: lookups run on
+the wallet token and still work, and a level change says plainly that the CRM
+sign-in is missing rather than failing with a token the endpoint does not take.
+The wallet login is the one that gates the sign-in, since nothing can be looked
+up without its token.
+
+Which host serves each differs per deployment, so both ends are configurable:
 
 ```
+BUZZEBEES_MERCHANT_BASE_URL=https://api1servicewallet.buzzebees.com  # the default
+BUZZEBEES_LOGIN_PATH=/merchant/login          # the default
 BUZZEBEES_SSO_BASE_URL=https://…              # required, never defaulted
 BUZZEBEES_SSO_LOGIN_PATH=/auth/bzbs_login     # the default
 ```
 
-The path accepts three forms, because all three are natural things to put
-there: a path, joined onto the base URL; a whole URL, used as given; or a bare
+Either path accepts three forms, because all three are natural things to put
+there: a path, joined onto its base URL; a whole URL, used as given; or a bare
 host, which gets the default path appended rather than posting to the root.
 
 Beyond those, login needs only `BUZZEBEES_APP_ID`. **Nobody can sign in until
@@ -85,7 +104,8 @@ anywhere — only the app id and the agency.
 | Concern | Where |
 | --- | --- |
 | Credential check | `POST` to the configured Buzzebees login endpoint — `src/lib/buzzebees/auth.ts` |
-| Session | HS256 JWT in an `HttpOnly`, `SameSite=Lax` cookie, 8-hour expiry, `Secure` in production; carries the operator, their tokens and their agency — `src/lib/auth/session.ts` |
+| Session | HS256 JWT in an `HttpOnly`, `SameSite=Lax` cookie, 8-hour expiry, `Secure` in production; carries the operator, their till, their tokens and their agency — `src/lib/auth/session.ts` |
+| Remembered till | `crmplus_pos`, `HttpOnly`, 180 days, written on a successful login to pre-fill the form — `src/lib/auth/pos-cookie.ts` |
 | Route gating | `src/proxy.ts` verifies the cookie signature and redirects to `/login` |
 | Authoritative check | `requireSession()` re-checks in every page and Server Action — `src/lib/auth/dal.ts` |
 | Brute-force throttle | 5 failed attempts per username per 10 minutes — `src/lib/auth/rate-limit.ts` |
@@ -96,7 +116,7 @@ should not be the only line of defence.
 
 Only an explicit `401` or `403` from Buzzebees is treated as a wrong password.
 Any other failure (unreachable service, `404` from a misconfigured
-`BUZZEBEES_SSO_LOGIN_PATH`, a non-JSON reply) surfaces as a connection error, is
+`BUZZEBEES_LOGIN_PATH`, a non-JSON reply) surfaces as a connection error, is
 logged server-side with the status and body, and does **not** count against
 the throttle — so a misconfigured deploy cannot masquerade as a typo.
 
@@ -107,15 +127,14 @@ Buzzebees request is echoed to the console as a `curl` command — the login
 POST and the authenticated API calls alike:
 
 ```
-[buzzebees:curl] POST https://sso.example.com/auth/bzbs_login (credentials masked)
-curl -X POST 'https://sso.example.com/auth/bzbs_login' \
+[buzzebees:curl] POST https://api1servicewallet.buzzebees.com/merchant/login (credentials masked)
+curl -X POST 'https://api1servicewallet.buzzebees.com/merchant/login' \
   -H 'app-id: app-test' \
   -F 'username=somchai' \
   -F 'password=***' \
-  -F 'app_id=app-test' \
-  -F 'os=web' \
-  -F 'platform=web' \
-  -F 'info={"service":"crmplus"}'
+  -F 'terminalid=T-77' \
+  -F 'branchid=B-42' \
+  -F 'brandid=BR-9'
 ```
 
 Passwords, `Authorization` headers and other credential fields are masked;
@@ -148,8 +167,9 @@ ships. Writing is best-effort by design: a log that cannot be written is
 reported to the console and held in memory, because an operator's level change
 should not fail over it.
 
-Entries record the operator, the customer and the levels involved. A failed
-login records the username that was typed; passwords are never written.
+Entries record the operator, their till, the customer and the levels involved.
+A failed login records the username that was typed; passwords are never
+written.
 
 ## Deploying
 
@@ -175,7 +195,9 @@ The server reads `PORT` and `HOSTNAME` at startup; the image defaults to
 | --- | --- |
 | `SESSION_SECRET` | Random, 32+ characters |
 | `ACTIVITY_LOG_DIR` | Where the activity log is written — point at a mounted volume |
-| `BUZZEBEES_APP_ID` | Buzzebees app id — the only one login needs beyond the sign-on host |
+| `BUZZEBEES_APP_ID` | Buzzebees app id — the only one login needs beyond the two login hosts |
+| `BUZZEBEES_MERCHANT_BASE_URL` | Optional — wallet login host, defaults to `api1servicewallet.buzzebees.com` |
+| `BUZZEBEES_LOGIN_PATH` | Optional — wallet login endpoint, defaults to `/merchant/login` |
 | `BUZZEBEES_SSO_BASE_URL` | Single sign-on host — required, never defaulted, since sign-ins post credentials to it |
 | `BUZZEBEES_SSO_LOGIN_PATH` | Optional — single sign-on endpoint, defaults to `/auth/bzbs_login` |
 | `BUZZEBEES_LOG_CURL` | Optional — log outgoing requests as curl commands |
@@ -199,7 +221,7 @@ credential or token reaches the browser.
 | Module | Purpose |
 | --- | --- |
 | `config.ts` | Reads the app id, agency and base URLs from the environment |
-| `auth.ts` | `POST /auth/bzbs_login` (multipart) — the CRM Plus and wallet tokens |
+| `auth.ts` | `POST /merchant/login` and `POST /auth/bzbs_login` (multipart, in parallel) — the wallet and CRM Plus tokens |
 | `client.ts` | Authorized fetch with the operator's own token |
 | `profile.ts` | `GET /pos/profile?contactNumber=…` |
 | `levels.ts` | `GET /crmpluslevel/list?agencyId=…&mode=point` |
@@ -264,7 +286,7 @@ src/
   components/       # UI: tabs, member card, history, modals
   lib/
     auth/           # Sessions, rate limiting, access checks
-    buzzebees/      # Buzzebees API: config, operator login, profile, levels
+    buzzebees/      # Buzzebees API: config, the two operator logins, profile, levels
     members/        # Domain types, levels, data source
   proxy.ts          # Route gate (Next.js 16's renamed middleware)
 ```
