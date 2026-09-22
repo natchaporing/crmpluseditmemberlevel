@@ -52,6 +52,14 @@ export async function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
+/**
+ * Everything but the static assets. Image files are excluded by extension
+ * because the brand mark is one: gating `/logo.png` behind the session would
+ * redirect it to `/login`, which is the one page that has to render it while
+ * nobody is signed in.
+ */
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.svg$).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico)$).*)",
+  ],
 };

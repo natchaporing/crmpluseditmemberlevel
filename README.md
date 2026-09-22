@@ -277,10 +277,13 @@ Sample numbers for the placeholder store: `0900000001`, `0900000002`,
 ## Project layout
 
 ```
+public/
+  logo.png          # The product mark, rendered by components/brand-mark.tsx
 src/
   app/
     actions/        # Server Actions (auth, member lookup and level change)
     login/          # Login page and form
+    favicon.ico     # Tab icon; icon.png and apple-icon.png sit beside it
     layout.tsx      # Root layout, fonts and metadata
     page.tsx        # The console, behind requireSession()
   components/       # UI: tabs, member card, history, modals
