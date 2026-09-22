@@ -179,7 +179,8 @@ The server reads `PORT` and `HOSTNAME` at startup; the image defaults to
 | `BUZZEBEES_SSO_LOGIN_PATH` | Optional — single sign-on endpoint, defaults to `/auth/bzbs_login` |
 | `BUZZEBEES_LOG_CURL` | Optional — log outgoing requests as curl commands |
 | `BUZZEBEES_AGENCY_ID` | Agency (tenant) whose members and levels this deployment manages — the production agency, which differs from the one in UAT captures |
-| `BUZZEBEES_CRMPLUS_BASE_URL` | Optional — CRM Plus back office, defaults to the production host |
+| `BUZZEBEES_CRMPLUS_BASE_URL` | Optional — CRM Plus back office (`/crmplusoffice/user`), defaults to the production host |
+| `BUZZEBEES_CRMPLUS_MODULE_BASE_URL` | Optional — CRM Plus module (level list, change log), a *different* host |
 
 None are needed at build time: every route that reads them is rendered on
 demand, so the image itself holds no secrets.

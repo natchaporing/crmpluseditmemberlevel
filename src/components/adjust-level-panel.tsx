@@ -6,7 +6,7 @@ import { saveMemberLevel, searchMember } from "@/app/actions/members";
 import { LevelBadge } from "@/components/level-badge";
 import { MemberCard } from "@/components/member-card";
 import { CheckIconCircle, Modal, SearchIconCircle } from "@/components/modal";
-import type { Member } from "@/lib/members/types";
+import type { Member, MemberLevel } from "@/lib/members/types";
 
 type SavedInfo = {
   name: string;
@@ -14,7 +14,13 @@ type SavedInfo = {
   toLevelCode: string;
 };
 
-export function AdjustLevelPanel({ onSaved }: { onSaved: () => void }) {
+export function AdjustLevelPanel({
+  levels,
+  onSaved,
+}: {
+  levels: MemberLevel[];
+  onSaved: () => void;
+}) {
   const [phone, setPhone] = useState("");
   const [member, setMember] = useState<Member | null>(null);
   const [notFoundPhone, setNotFoundPhone] = useState<string | null>(null);
@@ -110,6 +116,7 @@ export function AdjustLevelPanel({ onSaved }: { onSaved: () => void }) {
         <MemberCard
           key={`${member.userId}:${member.levelCode}`}
           member={member}
+          levels={levels}
           onSave={handleSave}
           saving={saving}
           error={saveError}

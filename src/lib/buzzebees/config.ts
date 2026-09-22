@@ -37,12 +37,30 @@ export function stampWalletBaseUrl(): string {
 }
 
 /**
- * CRM Plus back office: profile updates, the level list and the change log.
+ * The CRM Plus module that serves the level list and the change log.
+ *
+ * A different host from the one profile updates go to — `buzzcrmplusmodule`
+ * rather than `buzzcrmplusssomodule` — so the two are configured separately
+ * rather than sharing a base and quietly sending one endpoint's request to the
+ * other's host.
+ */
+export function crmPlusModuleBaseUrl(): string {
+  return (
+    process.env.BUZZEBEES_CRMPLUS_MODULE_BASE_URL?.trim() ||
+    "https://buzzcrmplusmodule.buzzebees.com"
+  );
+}
+
+/**
+ * CRM Plus back office: profile updates.
  *
  * Every default here is production. Reference requests for these endpoints
  * have been captured against `-uat` hosts, but those are request templates —
  * the shape of a call, not the host to send it to. Point this at a non-
  * production host only to deliberately target one.
+ *
+ * This one serves `/crmplusoffice/*`; the level list lives on
+ * `crmPlusModuleBaseUrl()`.
  */
 export function crmPlusBaseUrl(): string {
   return (

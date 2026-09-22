@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { AdjustLevelPanel } from "@/components/adjust-level-panel";
 import { HistoryPanel } from "@/components/history-panel";
+import type { MemberLevel } from "@/lib/members/types";
 
 type Tab = "adjust" | "history";
 
@@ -12,7 +13,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "history", label: "ประวัติการแก้ไข" },
 ];
 
-export function LevelConsole() {
+export function LevelConsole({ levels }: { levels: MemberLevel[] }) {
   const [tab, setTab] = useState<Tab>("adjust");
   // Bumped after a save so the history tab refetches when it is next shown.
   const [reloadKey, setReloadKey] = useState(0);
@@ -50,7 +51,10 @@ export function LevelConsole() {
         aria-labelledby="tab-adjust"
         hidden={tab !== "adjust"}
       >
-        <AdjustLevelPanel onSaved={() => setReloadKey((key) => key + 1)} />
+        <AdjustLevelPanel
+          levels={levels}
+          onSaved={() => setReloadKey((key) => key + 1)}
+        />
       </div>
 
       <div

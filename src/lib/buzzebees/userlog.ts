@@ -1,7 +1,7 @@
 import "server-only";
 
 import { buzzebeesFetch } from "@/lib/buzzebees/client";
-import { agencyId, appId, crmPlusBaseUrl } from "@/lib/buzzebees/config";
+import { agencyId, appId, crmPlusModuleBaseUrl } from "@/lib/buzzebees/config";
 import { firstString, isRecord, unwrapArray } from "@/lib/buzzebees/payload";
 
 /**
@@ -112,7 +112,9 @@ export async function fetchUserLog(
   token: string,
   agency: string = agencyId(),
 ): Promise<{ entries: CrmPlusUserLogEntry[]; raw: unknown }> {
-  const url = new URL(USERLOG_PATH, crmPlusBaseUrl());
+  // The captured request put this on the module host, not the one profile
+  // updates go to, despite the shared /crmplusoffice prefix.
+  const url = new URL(USERLOG_PATH, crmPlusModuleBaseUrl());
   url.searchParams.set("device_app_id", appId());
   url.searchParams.set("agencyId", agency);
   url.searchParams.set("userId", user);

@@ -3,8 +3,7 @@
 import { useState } from "react";
 
 import { LevelBadge } from "@/components/level-badge";
-import { MEMBER_LEVELS, levelId } from "@/lib/members/levels";
-import type { Member } from "@/lib/members/types";
+import type { Member, MemberLevel } from "@/lib/members/types";
 
 function StatBox({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -24,11 +23,14 @@ function AttributeValue({ value }: { value: string | number | boolean | null }) 
 
 export function MemberCard({
   member,
+  levels,
   onSave,
   saving,
   error,
 }: {
   member: Member;
+  /** From the CRM, or the built-in list when it could not be read. */
+  levels: MemberLevel[];
   onSave: (toLevelCode: string) => void;
   saving: boolean;
   error: string | null;
@@ -39,7 +41,8 @@ export function MemberCard({
   const [confirming, setConfirming] = useState(false);
 
   const fullName = `${member.firstName} ${member.lastName}`.trim();
-  const currentId = levelId(member.levelCode);
+  const currentId =
+    levels.find((level) => level.code === member.levelCode)?.id ?? null;
 
   return (
     <section className="rounded-xl bg-surface p-5 shadow-sm">
@@ -74,7 +77,7 @@ export function MemberCard({
           }}
           className="flex-1 rounded-lg border border-line bg-surface px-4 py-3 font-semibold outline-none focus:border-brand disabled:opacity-60"
         >
-          {MEMBER_LEVELS.map((level) => (
+          {levels.map((level) => (
             <option key={level.code} value={level.code}>
               {level.code}
             </option>

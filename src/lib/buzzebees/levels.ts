@@ -1,24 +1,25 @@
 import "server-only";
 
 import { buzzebeesFetch } from "@/lib/buzzebees/client";
-import { agencyId, appId, crmPlusBaseUrl } from "@/lib/buzzebees/config";
-import {
-  firstNumber,
-  firstString,
-  isRecord,
-  unwrapArray,
-} from "@/lib/buzzebees/payload";
+import { agencyId, appId, crmPlusModuleBaseUrl } from "@/lib/buzzebees/config";
+import { firstNumber, firstString, isRecord, unwrapArray } from "@/lib/buzzebees/payload";
 
 /**
- * The member levels available to an agency, from
- * `GET /crmplusoffice/profile?device_app_id=…&agencyId=…`.
+ * The member levels an agency offers, from
+ * `GET /crmpluslevel/list?agencyId=…&mode=point`.
  *
- * `src/lib/members/levels.ts` holds the same list as a hard-coded constant.
- * That list is what the UI still renders; this is the live source it should be
- * replaced by once the response shape is confirmed against the service.
+ * `src/lib/members/levels.ts` holds the same list as a hard-coded constant,
+ * which stands in when this returns nothing recognisable — an empty level
+ * picker would leave an operator unable to do the one thing the app is for.
  */
 
-const PROFILE_PATH = "/crmplusoffice/profile";
+const LIST_PATH = "/crmpluslevel/list";
+
+/**
+ * Which set of levels to list. The back office asks for the point-based ones;
+ * no other mode has been seen, so it is fixed rather than configurable.
+ */
+const LEVEL_MODE = "point";
 
 export type CrmPlusLevel = {
   /** The value `levelName` takes when updating a profile, e.g. `Plus2_69`. */
@@ -31,13 +32,13 @@ export type CrmPlusLevel = {
 const NAME_KEYS = ["levelName", "level_name", "name", "code", "levelCode"];
 
 /** Keys the numeric id might arrive under. */
-const ID_KEYS = ["levelId", "level_id", "id"];
+const ID_KEYS = ["levelId", "level_id", "id", "level"];
 
 /**
  * Pulls the level list out of a response whose shape is not yet confirmed.
  *
  * Deliberately tolerant: a bare array, or one nested under any of the usual
- * wrapper keys, and the name and id read under their usual spellings. An
+ * wrapper keys, with the name and id read under their usual spellings. An
  * unrecognised payload yields an empty list rather than throwing — the caller
  * still has `raw` to fall back on.
  */
@@ -71,11 +72,9 @@ export async function fetchUserLevels(
   token: string,
   agency: string = agencyId(),
 ): Promise<{ levels: CrmPlusLevel[]; raw: unknown }> {
-  const url = new URL(PROFILE_PATH, crmPlusBaseUrl());
-  // Sent as a query parameter here, unlike the update endpoint which takes it
-  // as a form field.
-  url.searchParams.set("device_app_id", appId());
+  const url = new URL(LIST_PATH, crmPlusModuleBaseUrl());
   url.searchParams.set("agencyId", agency);
+  url.searchParams.set("mode", LEVEL_MODE);
 
   const { json } = await buzzebeesFetch(
     url.toString(),
