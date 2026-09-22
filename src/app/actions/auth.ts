@@ -132,6 +132,7 @@ export async function login(
     branchId,
     brandId,
     token: operator.token,
+    ssoToken: operator.ssoToken,
     agencyId: operator.agencyId ?? "",
   });
 

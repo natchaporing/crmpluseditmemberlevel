@@ -75,6 +75,7 @@ export async function saveMemberLevel(
       toLevelCode,
       changedBy: session.sub,
       token: session.token,
+      ssoToken: session.ssoToken,
       agencyId: session.agencyId,
     });
   } catch (error) {
@@ -111,6 +112,8 @@ export async function saveMemberLevel(
     "unknown-level": "ไม่รู้จัก Level ที่เลือก",
     "same-level": "Level ที่เลือกตรงกับ Level ปัจจุบันอยู่แล้ว",
     "no-member-id": "ข้อมูลลูกค้าไม่มีรหัสผู้ใช้ จึงไม่สามารถบันทึก Level ได้",
+    "no-sso-token":
+      "เข้าสู่ระบบ CRM (SSO) ไม่สำเร็จ จึงยังบันทึก Level ไม่ได้ — กรุณาออกจากระบบแล้วเข้าใหม่",
   };
 
   return { status: "error", message: messages[result.error] };

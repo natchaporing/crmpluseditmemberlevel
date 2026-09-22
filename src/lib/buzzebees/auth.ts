@@ -4,6 +4,8 @@ import {
   appId,
   merchantBaseUrl,
   operatorLoginPath,
+  ssoBaseUrl,
+  ssoLoginPath,
 } from "@/lib/buzzebees/config";
 import { logCurl } from "@/lib/buzzebees/curl-log";
 
@@ -18,6 +20,9 @@ import { logCurl } from "@/lib/buzzebees/curl-log";
 /** Appended when the configured endpoint names a host but no path. */
 const DEFAULT_LOGIN_PATH = "/merchant/login";
 
+/** The same, for single sign-on. */
+const DEFAULT_SSO_PATH = "/auth/bzbs_login";
+
 /**
  * The URL to post a login to, from whatever `BUZZEBEES_LOGIN_PATH` holds.
  *
@@ -27,14 +32,18 @@ const DEFAULT_LOGIN_PATH = "/merchant/login";
  * than the endpoint itself, so the default path is appended instead of posting
  * to the root.
  */
-function loginUrl(configured: string): string {
+function loginUrl(
+  configured: string,
+  base: string = merchantBaseUrl(),
+  fallbackPath: string = DEFAULT_LOGIN_PATH,
+): string {
   if (!/^https?:\/\//i.test(configured)) {
-    return `${merchantBaseUrl()}${configured}`;
+    return `${base}${configured}`;
   }
 
   const url = new URL(configured);
   if (url.pathname === "" || url.pathname === "/") {
-    url.pathname = DEFAULT_LOGIN_PATH;
+    url.pathname = fallbackPath;
   }
 
   return url.toString();
@@ -110,13 +119,14 @@ async function performLogin(
   path: string,
   fields: Record<string, string>,
   extraSecrets: string[] = [],
+  options: { url?: string } = {},
 ): Promise<MerchantLogin | null> {
   const form = new FormData();
   for (const [field, value] of Object.entries(fields)) {
     form.append(field, value);
   }
 
-  const url = loginUrl(path);
+  const url = options.url ?? loginUrl(path);
 
   logCurl(
     `POST ${url}`,
@@ -199,8 +209,10 @@ export type OperatorIdentity = {
   username: string;
   /** Display name from the reply, falling back to the username. */
   name: string;
-  /** The token every later call for this operator is made with. */
+  /** The wallet token, which customer lookups are made with. */
   token: string;
+  /** The single sign-on token, which the CRM Plus endpoints accept. */
+  ssoToken: string;
   /** The agency the login placed them in, where it says so. */
   agencyId: string | null;
 };
@@ -276,30 +288,86 @@ function extractName(payload: Record<string, unknown>): string | null {
  * Which endpoint authenticates operators varies per deployment, hence
  * `BUZZEBEES_LOGIN_PATH`.
  */
+/**
+ * The fields single sign-on expects beyond the credentials.
+ *
+ * Constant per request: the back office sends the literal string "null" for
+ * the device details a browser has none of, rather than omitting them.
+ */
+function ssoFields(): Record<string, string> {
+  return {
+    contact_number: "null",
+    uuid: "null",
+    app_id: appId(),
+    os: "web",
+    info: JSON.stringify({ service: "crmplus" }),
+    platform: "web",
+    mac_address: "null",
+    device_noti_enable: "false",
+    client_version: "null",
+    device_token: "null",
+  };
+}
+
+/**
+ * Signs in to single sign-on, which issues the token the CRM Plus endpoints
+ * accept. Runs alongside the wallet login rather than after it: neither
+ * depends on the other, and an operator should not wait for two round trips
+ * in sequence.
+ */
+async function ssoLogin(
+  username: string,
+  password: string,
+): Promise<MerchantLogin | null> {
+  return performLogin(
+    ssoLoginPath(),
+    { username, password, ...ssoFields() },
+    [password],
+    { url: loginUrl(ssoLoginPath(), ssoBaseUrl(), DEFAULT_SSO_PATH) },
+  );
+}
+
 export async function operatorLogin(
   username: string,
   password: string,
   pos: PosContext,
 ): Promise<OperatorIdentity | null> {
-  const result = await performLogin(
-    operatorLoginPath(),
-    {
-      username,
-      password,
-      terminalid: pos.terminalId,
-      branchid: pos.branchId,
-      brandid: pos.brandId,
-    },
-    [password],
-  );
+  // Both logins go out together. The wallet one establishes who the operator
+  // is; single sign-on issues the token the CRM Plus endpoints want.
+  const [wallet, sso] = await Promise.all([
+    performLogin(
+      operatorLoginPath(),
+      {
+        username,
+        password,
+        terminalid: pos.terminalId,
+        branchid: pos.branchId,
+        brandid: pos.brandId,
+      },
+      [password],
+    ),
+    // A failure here must not cost the operator their sign-in: lookups run on
+    // the wallet token and still work. It is logged, and the level change says
+    // so at the point it is needed.
+    ssoLogin(username, password).catch((error: unknown) => {
+      console.error(
+        `Single sign-on failed for ${username}:`,
+        error instanceof Error ? error.message : error,
+      );
+      return null;
+    }),
+  ]);
 
-  if (!result) return null;
+  if (!wallet) return null;
 
   return {
     username,
-    name: extractName(result.raw) ?? username,
-    token: result.token,
-    agencyId: extractAgencyId(result.raw),
+    name: extractName(wallet.raw) ?? username,
+    token: wallet.token,
+    ssoToken: sso?.token ?? "",
+    // The agency is whichever login says; single sign-on is asked first, since
+    // it is the one that serves CRM Plus.
+    agencyId: (sso && extractAgencyId(sso.raw)) ?? extractAgencyId(wallet.raw),
   };
 }
 

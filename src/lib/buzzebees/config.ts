@@ -61,6 +61,24 @@ export function agencyId(): string {
   return required("BUZZEBEES_AGENCY_ID");
 }
 
+/**
+ * Single sign-on, which issues the token the CRM Plus endpoints accept.
+ *
+ * Signing in hits this alongside the wallet login: the two return different
+ * tokens, and the back office uses each for its own set of endpoints.
+ */
+export function ssoBaseUrl(): string {
+  return (
+    process.env.BUZZEBEES_SSO_BASE_URL?.trim() ||
+    "https://apilpw2sso.buzzebees.com"
+  );
+}
+
+/** As `BUZZEBEES_LOGIN_PATH`, but for single sign-on. */
+export function ssoLoginPath(): string {
+  return process.env.BUZZEBEES_SSO_LOGIN_PATH?.trim() || "/auth/bzbs_login";
+}
+
 export function appId(): string {
   return required("BUZZEBEES_APP_ID");
 }

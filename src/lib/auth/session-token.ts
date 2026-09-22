@@ -29,6 +29,12 @@ export type SessionPayload = {
    */
   token: string;
   /**
+   * The single sign-on token, which the CRM Plus endpoints accept. Empty when
+   * that login failed, in which case a level change reports it rather than
+   * being attempted with the wrong token.
+   */
+  ssoToken: string;
+  /**
    * The agency from this operator's login. Empty when the login did not say,
    * in which case `BUZZEBEES_AGENCY_ID` stands in.
    */
@@ -58,6 +64,7 @@ export async function encryptSession(payload: SessionPayload): Promise<string> {
     branchId: payload.branchId,
     brandId: payload.brandId,
     token: payload.token,
+    ssoToken: payload.ssoToken,
     agencyId: payload.agencyId,
   })
     .setProtectedHeader({ alg: "HS256" })
@@ -84,6 +91,7 @@ export async function decryptSession(
       branchId,
       brandId,
       token: apiToken,
+      ssoToken,
       agencyId,
     } = payload;
 
@@ -107,8 +115,9 @@ export async function decryptSession(
       branchId,
       brandId,
       token: apiToken,
-      // Absent in sessions minted before the agency was carried; those fall
-      // back to configuration rather than being treated as signed out.
+      // Both absent in sessions minted before they were carried; an empty
+      // value degrades at the point of use rather than signing anyone out.
+      ssoToken: typeof ssoToken === "string" ? ssoToken : "",
       agencyId: typeof agencyId === "string" ? agencyId : "",
     };
   } catch {

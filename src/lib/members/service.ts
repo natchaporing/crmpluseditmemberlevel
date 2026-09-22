@@ -137,14 +137,22 @@ export type ChangeLevelResult =
   | { ok: true; member: Member; fromLevelCode: string; toLevelCode: string }
   | {
       ok: false;
-      error: "not-found" | "unknown-level" | "same-level" | "no-member-id";
+      error:
+        | "not-found"
+        | "unknown-level"
+        | "same-level"
+        | "no-member-id"
+        | "no-sso-token";
     };
 
 export async function changeMemberLevel(options: {
   phone: string;
   toLevelCode: string;
   changedBy: string;
+  /** The wallet token, for looking the member up. */
   token: string;
+  /** The single sign-on token, which the update endpoint accepts. */
+  ssoToken: string;
   /** From the operator's login; falls back to configuration when empty. */
   agencyId?: string;
 }): Promise<ChangeLevelResult> {
@@ -159,9 +167,13 @@ export async function changeMemberLevel(options: {
 
   if (!member.userId) return { ok: false, error: "no-member-id" };
 
+  // The wallet token is not the one this endpoint takes, and sending it would
+  // fail in a way that looks like a bad request rather than a missing sign-in.
+  if (!options.ssoToken) return { ok: false, error: "no-sso-token" };
+
   await updateMemberLevel(
     { userId: member.userId, levelName: target.code, agency: options.agencyId },
-    options.token,
+    options.ssoToken,
   );
 
   // The CRM keeps its own log; this one covers the operator's own session, so
