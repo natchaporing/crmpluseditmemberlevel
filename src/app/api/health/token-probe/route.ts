@@ -54,24 +54,28 @@ export async function GET(request: Request) {
     levelName: member.levelCode,
   };
   const withPoint = { ...identity, point: str(points.points ?? raw.Point ?? 0) };
+  // Both of the errors so far named a field outright — point, then active —
+  // so try exactly those before sending anything the service might rewrite.
+  const withActive = { ...withPoint, active: str(raw.Active ?? true) };
+  const withRefs = {
+    ...withActive,
+    referenceInfo: str(ext.reference_info),
+    referenceInfo2: str(ext.reference_info2),
+  };
   const withNames = {
-    ...withPoint,
+    ...withRefs,
     firstName: str(raw.FirstName),
     lastName: str(raw.LastName),
     contactNumber: str(raw.Contact_Number),
     email: str(raw.Email),
     gender: str(raw.Gender),
-    birthDate: str(raw.BirthDate),
   };
-  const withRefs = {
-    ...withNames,
-    referenceInfo: str(ext.reference_info),
-    referenceInfo2: str(ext.reference_info2),
-    active: "true",
-  };
+  // Last, and only if the service insists: sending this shifted a birth date
+  // by 21 hours once already, so it is the field to avoid if it is optional.
+  const withBirthDate = { ...withNames, birthDate: str(raw.BirthDate) };
   // Consents exactly as the profile reports them — not converted to "Accepted".
   const withConsents = {
-    ...withRefs,
+    ...withBirthDate,
     termAndCondition: str(raw.TermAndCondition),
     dataPrivacy: str(raw.DataPrivacy),
     lineMarketing: str(raw.LineMarketing),
@@ -107,9 +111,11 @@ export async function GET(request: Request) {
   for (const [label, fields] of [
     ["A identity + level", identity],
     ["B + point", withPoint],
-    ["C + names/contact/email/gender/birthDate", withNames],
-    ["D + referenceInfo + active", withRefs],
-    ["E + consents (as the profile reports them)", withConsents],
+    ["C + active", withActive],
+    ["D + referenceInfo", withRefs],
+    ["E + names/contact/email/gender", withNames],
+    ["F + birthDate (rewrites it — avoid if optional)", withBirthDate],
+    ["G + consents (as the profile reports them)", withConsents],
   ] as const) {
     const result = await attempt(label, fields);
     attempts.push(result);
