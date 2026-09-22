@@ -29,6 +29,14 @@ export type ActivityEntry = {
   at: string;
   /** Username of the operator, or what they typed when a login failed. */
   operator: string;
+  /**
+   * The agency the operator was signed in under, as their login reported it.
+   *
+   * Absent when the login did not say — and on every line written before this
+   * was recorded. Those form their own group rather than being attributed to
+   * an agency nobody confirmed.
+   */
+  agencyId?: string;
   action: ActivityAction;
   outcome: "success" | "failure";
   /** The till they were signed in at. */
@@ -97,8 +105,15 @@ export async function recordActivity(
 export async function readActivity(options: {
   limit?: number;
   action?: ActivityAction;
+  /**
+   * Keep only the entries recorded under this agency. An empty string is a
+   * filter in its own right — it selects the entries that carry no agency,
+   * which is what an operator whose login named none should see. Omit it to
+   * read the whole log.
+   */
+  agencyId?: string;
 } = {}): Promise<ActivityEntry[]> {
-  const { limit = 50, action } = options;
+  const { limit = 50, action, agencyId } = options;
 
   let entries: ActivityEntry[];
   try {
@@ -120,9 +135,11 @@ export async function readActivity(options: {
     entries = [...fallback];
   }
 
-  const filtered = action
-    ? entries.filter((entry) => entry.action === action)
-    : entries;
+  const filtered = entries.filter(
+    (entry) =>
+      (action === undefined || entry.action === action) &&
+      (agencyId === undefined || (entry.agencyId ?? "") === agencyId),
+  );
 
   return filtered.slice(0, limit);
 }

@@ -167,9 +167,18 @@ ships. Writing is best-effort by design: a log that cannot be written is
 reported to the console and held in memory, because an operator's level change
 should not fail over it.
 
-Entries record the operator, their till, the customer and the levels involved.
-A failed login records the username that was typed; passwords are never
-written.
+Entries record the operator, their agency, their till, the customer and the
+levels involved. A failed login records the username that was typed; passwords
+are never written.
+
+The agency is the one the operator's own login reported, and the history tab
+shows only the entries recorded under it. Operators carry their agency from
+their sign-in rather than from configuration, so one deployment can serve more
+than one, and the shared file should not let either read the other's changes.
+Entries with no agency — every line written before this was recorded, and any
+whose login did not say — form their own group: they are shown to an operator
+whose login also named none, and to nobody else. They stay in the file
+regardless; it is only the tab that is scoped.
 
 ## Deploying
 

@@ -45,6 +45,7 @@ export async function searchMember(phone: string): Promise<SearchResult> {
         operator: session.sub,
         action: "search",
         outcome: "failure",
+        agencyId: session.agencyId || undefined,
         terminalId: session.terminalId,
         branchId: session.branchId,
         brandId: session.brandId,
@@ -63,6 +64,7 @@ export async function searchMember(phone: string): Promise<SearchResult> {
     operator: session.sub,
     action: "search",
     outcome: member ? "success" : "failure",
+    agencyId: session.agencyId || undefined,
     terminalId: session.terminalId,
     branchId: session.branchId,
     brandId: session.brandId,
@@ -113,6 +115,7 @@ export async function saveMemberLevel(
         operator: session.sub,
         action: "level-change",
         outcome: "failure",
+        agencyId: session.agencyId || undefined,
         terminalId: session.terminalId,
         branchId: session.branchId,
         brandId: session.brandId,
@@ -141,6 +144,7 @@ export async function saveMemberLevel(
       operator: session.sub,
       action: "level-change",
       outcome: "success",
+      agencyId: session.agencyId || undefined,
       terminalId: session.terminalId,
       branchId: session.branchId,
       brandId: session.brandId,
@@ -172,6 +176,7 @@ export async function saveMemberLevel(
     operator: session.sub,
     action: "level-change",
     outcome: "failure",
+    agencyId: session.agencyId || undefined,
     terminalId: session.terminalId,
     branchId: session.branchId,
     brandId: session.brandId,
@@ -190,9 +195,16 @@ export async function saveMemberLevel(
  * level changes. Everything else is on the server for whoever needs it.
  */
 export async function getHistory(): Promise<LevelChange[]> {
-  await requireSession();
+  const session = await requireSession();
 
-  const entries = await readActivity({ action: "level-change", limit: 50 });
+  // Scoped to the signed-in operator's agency: operators carry their own from
+  // their login, so one deployment can serve more than one, and nobody should
+  // read another agency's changes out of the shared file.
+  const entries = await readActivity({
+    action: "level-change",
+    agencyId: session.agencyId,
+    limit: 50,
+  });
 
   return entries.map((entry) => ({
     id: entry.id,
