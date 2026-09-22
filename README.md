@@ -69,26 +69,27 @@ server-rendered and fills the form in itself), and lasts 180 days. Logging out
 deliberately leaves it in place — that is the point of it. It is per browser,
 so a different machine starts from empty fields.
 
-Because Buzzebees exposes several login endpoints and which one authenticates
-operators differs per deployment, the path is configurable:
-
-```
-BUZZEBEES_LOGIN_PATH=/merchant/login   # the default
-```
-
-Login therefore needs only `BUZZEBEES_APP_ID`. **Nobody can sign in until it
-is set** — `/api/health` reports this as `login.ready`.
-
-There is no service account, and no Buzzebees credentials are configured
-anywhere — only the app id and the agency.
-
 Signing in is one call. `POST /auth/bzbs_login` returns two tokens: `token`,
 which the CRM Plus endpoints accept, and `ewallet_token`, which customer
 lookups travel with. Both are held in the session.
 
-`BUZZEBEES_SSO_LOGIN_PATH` accepts a path, joined onto the single sign-on base
-URL; a whole URL, used as given; or a bare host, which gets the default path
-appended.
+Which host serves that endpoint differs per deployment, so it is configured
+rather than fixed:
+
+```
+BUZZEBEES_SSO_BASE_URL=https://…              # required, never defaulted
+BUZZEBEES_SSO_LOGIN_PATH=/auth/bzbs_login     # the default
+```
+
+The path accepts three forms, because all three are natural things to put
+there: a path, joined onto the base URL; a whole URL, used as given; or a bare
+host, which gets the default path appended rather than posting to the root.
+
+Beyond those, login needs only `BUZZEBEES_APP_ID`. **Nobody can sign in until
+it is set** — `/api/health` reports this as `login.ready`.
+
+There is no service account, and no Buzzebees credentials are configured
+anywhere — only the app id and the agency.
 
 ### How it works
 
@@ -107,7 +108,7 @@ should not be the only line of defence.
 
 Only an explicit `401` or `403` from Buzzebees is treated as a wrong password.
 Any other failure (unreachable service, `404` from a misconfigured
-`BUZZEBEES_LOGIN_PATH`, a non-JSON reply) surfaces as a connection error, is
+`BUZZEBEES_SSO_LOGIN_PATH`, a non-JSON reply) surfaces as a connection error, is
 logged server-side with the status and body, and does **not** count against
 the throttle — so a misconfigured deploy cannot masquerade as a typo.
 
@@ -118,14 +119,15 @@ Buzzebees request is echoed to the console as a `curl` command — the login
 POST and the authenticated API calls alike:
 
 ```
-[buzzebees:curl] POST /merchant/login (credentials masked)
-curl -X POST 'https://api1servicewallet.buzzebees.com/merchant/login' \
+[buzzebees:curl] POST https://sso.example.com/auth/bzbs_login (credentials masked)
+curl -X POST 'https://sso.example.com/auth/bzbs_login' \
   -H 'app-id: app-test' \
   -F 'username=somchai' \
   -F 'password=***' \
-  -F 'terminalid=T-77' \
-  -F 'branchid=B-42' \
-  -F 'brandid=BR-9'
+  -F 'app_id=app-test' \
+  -F 'os=web' \
+  -F 'platform=web' \
+  -F 'info={"service":"crmplus"}'
 ```
 
 Passwords, `Authorization` headers and other credential fields are masked;
@@ -186,7 +188,7 @@ The server reads `PORT` and `HOSTNAME` at startup; the image defaults to
 | --- | --- |
 | `SESSION_SECRET` | Random, 32+ characters |
 | `ACTIVITY_LOG_DIR` | Where the activity log is written — point at a mounted volume |
-| `BUZZEBEES_APP_ID` | Merchant API app id — the only one login needs |
+| `BUZZEBEES_APP_ID` | Buzzebees app id — the only one login needs beyond the sign-on host |
 | `BUZZEBEES_SSO_BASE_URL` | Single sign-on host — required, never defaulted, since sign-ins post credentials to it |
 | `BUZZEBEES_SSO_LOGIN_PATH` | Optional — single sign-on endpoint, defaults to `/auth/bzbs_login` |
 | `BUZZEBEES_LOG_CURL` | Optional — log outgoing requests as curl commands |
@@ -209,17 +211,21 @@ credential or token reaches the browser.
 
 | Module | Purpose |
 | --- | --- |
-| `config.ts` | Reads credentials and base URLs from the environment |
-| `auth.ts` | `POST /merchant/login` (multipart), token cache, single-flight |
-| `client.ts` | Authorized fetch, retries once on 401 with a fresh token |
+| `config.ts` | Reads the app id, agency and base URLs from the environment |
+| `auth.ts` | `POST /auth/bzbs_login` (multipart) — the CRM Plus and wallet tokens |
+| `client.ts` | Authorized fetch with the operator's own token |
 | `profile.ts` | `GET /pos/profile?contactNumber=…` |
+| `levels.ts` | `GET /crmpluslevel/list?agencyId=…&mode=point` |
+| `user.ts` | `POST /crmplusoffice/user` — the whole record, level changed |
 
 The token is sent as `Authorization: token <access_token>` — the scheme is the
-literal word `token`, not `Bearer`.
+literal word `token`, not `Bearer`. Nothing is cached and there is nothing to
+refresh on a 401: minting a token needs the operator's password, so a rejected
+one sends them back to the login page.
 
-Credentials come from the environment (see [Railway](#railway) for the list).
-Each is read lazily at the point of use, so `next build` and any route that
-does not call Buzzebees work without them; a missing one raises an error
+Hosts and ids come from the environment (see [Railway](#railway) for the
+list). Each is read lazily at the point of use, so `next build` and any route
+that does not call Buzzebees work without them; a missing one raises an error
 naming the variable.
 
 > **Rotate the credentials that were committed earlier.** An earlier revision
@@ -271,7 +277,7 @@ src/
   components/       # UI: tabs, member card, history, modals
   lib/
     auth/           # Sessions, rate limiting, access checks
-    buzzebees/      # Buzzebees API: credentials, operator + merchant login, profile
+    buzzebees/      # Buzzebees API: config, operator login, profile, levels
     members/        # Domain types, levels, data source
   proxy.ts          # Route gate (Next.js 16's renamed middleware)
 ```

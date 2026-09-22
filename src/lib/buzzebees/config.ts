@@ -74,8 +74,9 @@ export function agencyId(): string {
 /**
  * Single sign-on, which issues the token the CRM Plus endpoints accept.
  *
- * Signing in hits this alongside the wallet login: the two return different
- * tokens, and the back office uses each for its own set of endpoints.
+ * Signing in is a single call to this host: the reply carries the CRM Plus
+ * token and the wallet token both, and the back office uses each for its own
+ * set of endpoints.
  *
  * Required rather than defaulted. Every sign-in posts an operator's real
  * credentials here, so the host is one to be chosen deliberately, not one this

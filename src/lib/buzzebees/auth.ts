@@ -6,10 +6,9 @@ import { logCurl } from "@/lib/buzzebees/curl-log";
 /**
  * Operator authentication against single sign-on.
  *
- * One login, two tokens. `POST /auth/bzbs_login` returns the CRM Plus token as
- * `token` and the wallet token as `ewallet_token`, so the separate call to
- * `/merchant/login` this used to make is gone: it fetched a token that this
- * reply already carries.
+ * One login, two tokens: `POST /auth/bzbs_login` returns the CRM Plus token as
+ * `token` and the wallet token as `ewallet_token`. Customer lookups travel on
+ * the second, profile updates on the first.
  */
 
 /** Appended when the configured endpoint names a host but no path. */
