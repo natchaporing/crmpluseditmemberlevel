@@ -28,6 +28,11 @@ export type SessionPayload = {
    * they make travels with it, so it lives as long as their session does.
    */
   token: string;
+  /**
+   * The agency from this operator's login. Empty when the login did not say,
+   * in which case `BUZZEBEES_AGENCY_ID` stands in.
+   */
+  agencyId: string;
 };
 
 let cachedKey: Uint8Array | undefined;
@@ -53,6 +58,7 @@ export async function encryptSession(payload: SessionPayload): Promise<string> {
     branchId: payload.branchId,
     brandId: payload.brandId,
     token: payload.token,
+    agencyId: payload.agencyId,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.sub)
@@ -71,7 +77,15 @@ export async function decryptSession(
       algorithms: ["HS256"],
     });
 
-    const { sub, name, terminalId, branchId, brandId, token: apiToken } = payload;
+    const {
+      sub,
+      name,
+      terminalId,
+      branchId,
+      brandId,
+      token: apiToken,
+      agencyId,
+    } = payload;
 
     // A session minted before the till fields existed fails this check and is
     // treated as signed out, which is the safe direction.
@@ -86,7 +100,17 @@ export async function decryptSession(
       return null;
     }
 
-    return { sub, name, terminalId, branchId, brandId, token: apiToken };
+    return {
+      sub,
+      name,
+      terminalId,
+      branchId,
+      brandId,
+      token: apiToken,
+      // Absent in sessions minted before the agency was carried; those fall
+      // back to configuration rather than being treated as signed out.
+      agencyId: typeof agencyId === "string" ? agencyId : "",
+    };
   } catch {
     // Expired, tampered with, or signed by a different secret.
     return null;

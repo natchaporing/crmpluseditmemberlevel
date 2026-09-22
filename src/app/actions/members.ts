@@ -3,6 +3,7 @@
 import { requireSession } from "@/lib/auth/dal";
 import { BuzzebeesAuthError } from "@/lib/buzzebees/auth";
 import { BuzzebeesApiError } from "@/lib/buzzebees/client";
+import { MissingMemberIdError } from "@/lib/buzzebees/user";
 import {
   changeMemberLevel,
   findMemberByPhone,
@@ -66,12 +67,35 @@ export async function saveMemberLevel(
 ): Promise<SaveLevelResult> {
   const session = await requireSession();
 
-  const result = await changeMemberLevel({
-    phone,
-    toLevelCode,
-    changedBy: session.sub,
-    token: session.token,
-  });
+  // A CRM that rejects or cannot be reached must not look like a saved change.
+  let result;
+  try {
+    result = await changeMemberLevel({
+      phone,
+      toLevelCode,
+      changedBy: session.sub,
+      token: session.token,
+      agencyId: session.agencyId,
+    });
+  } catch (error) {
+    if (error instanceof BuzzebeesApiError || error instanceof BuzzebeesAuthError) {
+      console.error(`Level change failed: ${error.message}`, {
+        status: error.status,
+        body: error.body,
+      });
+      return {
+        status: "error",
+        message: "บันทึก Level ไม่สำเร็จ — ระบบ CRM ปฏิเสธหรือเชื่อมต่อไม่ได้ กรุณาลองใหม่",
+      };
+    }
+    if (error instanceof MissingMemberIdError) {
+      return {
+        status: "error",
+        message: "ข้อมูลลูกค้าไม่มีรหัสผู้ใช้ จึงไม่สามารถบันทึก Level ได้",
+      };
+    }
+    throw error;
+  }
 
   if (result.ok) {
     return {
@@ -86,8 +110,7 @@ export async function saveMemberLevel(
     "not-found": "ไม่พบลูกค้ารายนี้ในระบบ",
     "unknown-level": "ไม่รู้จัก Level ที่เลือก",
     "same-level": "Level ที่เลือกตรงกับ Level ปัจจุบันอยู่แล้ว",
-    "write-not-wired":
-      "ยังไม่ได้เชื่อมต่อการบันทึก Level กลับไปยัง CRM — ค้นหาข้อมูลได้ แต่ยังบันทึกไม่ได้",
+    "no-member-id": "ข้อมูลลูกค้าไม่มีรหัสผู้ใช้ จึงไม่สามารถบันทึก Level ได้",
   };
 
   return { status: "error", message: messages[result.error] };

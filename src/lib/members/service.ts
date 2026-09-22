@@ -2,6 +2,9 @@ import "server-only";
 
 import { firstNumber, firstString, isRecord } from "@/lib/buzzebees/payload";
 import { fetchPosProfile } from "@/lib/buzzebees/profile";
+import { updateMemberLevel } from "@/lib/buzzebees/user";
+import { randomUUID } from "node:crypto";
+
 import { findLevel, levelCodeById } from "@/lib/members/levels";
 import { store } from "@/lib/members/store";
 import type { LevelChange, Member } from "@/lib/members/types";
@@ -134,7 +137,7 @@ export type ChangeLevelResult =
   | { ok: true; member: Member; fromLevelCode: string; toLevelCode: string }
   | {
       ok: false;
-      error: "not-found" | "unknown-level" | "same-level" | "write-not-wired";
+      error: "not-found" | "unknown-level" | "same-level" | "no-member-id";
     };
 
 export async function changeMemberLevel(options: {
@@ -142,6 +145,8 @@ export async function changeMemberLevel(options: {
   toLevelCode: string;
   changedBy: string;
   token: string;
+  /** From the operator's login; falls back to configuration when empty. */
+  agencyId?: string;
 }): Promise<ChangeLevelResult> {
   const member = await findMemberByPhone(options.phone, options.token);
   if (!member) return { ok: false, error: "not-found" };
@@ -152,12 +157,32 @@ export async function changeMemberLevel(options: {
   const fromLevelCode = member.levelCode;
   if (fromLevelCode === target.code) return { ok: false, error: "same-level" };
 
-  // The member now comes from the CRM, so there is no local record to change.
-  // Writing the level back means POST /crmplusoffice/user, which replaces the
-  // whole profile — see updateCrmPlusUser. Until the /pos/profile payload is
-  // mapped onto CrmPlusUser field by field, saying so beats mutating an object
-  // that is thrown away, which would report a success that never happened.
-  return { ok: false, error: "write-not-wired" };
+  if (!member.userId) return { ok: false, error: "no-member-id" };
+
+  await updateMemberLevel(
+    { userId: member.userId, levelName: target.code, agency: options.agencyId },
+    options.token,
+  );
+
+  // The CRM keeps its own log; this one covers the operator's own session, so
+  // the history tab shows what they just did without a second round trip.
+  store.history.unshift({
+    id: randomUUID(),
+    changedAt: new Date().toISOString(),
+    changedBy: options.changedBy,
+    memberName: `${member.firstName} ${member.lastName}`.trim(),
+    contactNumber: member.contactNumber,
+    fromLevelCode,
+    toLevelCode: target.code,
+    status: "success",
+  });
+
+  return {
+    ok: true,
+    member: { ...member, levelCode: target.code },
+    fromLevelCode,
+    toLevelCode: target.code,
+  };
 }
 
 export async function listHistory(limit = 50): Promise<LevelChange[]> {

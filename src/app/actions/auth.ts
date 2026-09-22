@@ -132,6 +132,7 @@ export async function login(
     branchId,
     brandId,
     token: operator.token,
+    agencyId: operator.agencyId ?? "",
   });
 
   // Outlives the session, so the next sign-in at this till starts pre-filled.

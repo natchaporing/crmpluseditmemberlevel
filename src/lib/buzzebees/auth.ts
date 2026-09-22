@@ -179,7 +179,47 @@ export type OperatorIdentity = {
   name: string;
   /** The token every later call for this operator is made with. */
   token: string;
+  /** The agency the login placed them in, where it says so. */
+  agencyId: string | null;
 };
+
+/** Keys the reply might carry the operator's agency under. */
+const AGENCY_KEYS = [
+  "agencyId",
+  "AgencyId",
+  "AgencyID",
+  "agency_id",
+  "agencyid",
+] as const;
+
+/**
+ * The agency the operator belongs to, read from their login.
+ *
+ * Looked for at the top level and one level down, since login replies often
+ * nest the account under `data` or `user`.
+ */
+function extractAgencyId(payload: Record<string, unknown>): string | null {
+  const read = (source: Record<string, unknown>): string | null => {
+    for (const key of AGENCY_KEYS) {
+      const value = source[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+      if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    }
+    return null;
+  };
+
+  const top = read(payload);
+  if (top) return top;
+
+  for (const nested of Object.values(payload)) {
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      const found = read(nested as Record<string, unknown>);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
 
 /** Keys the reply might carry a human-readable name under. */
 const NAME_KEYS = [
@@ -237,6 +277,7 @@ export async function operatorLogin(
     username,
     name: extractName(result.raw) ?? username,
     token: result.token,
+    agencyId: extractAgencyId(result.raw),
   };
 }
 
