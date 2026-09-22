@@ -89,8 +89,8 @@ export function missingBuzzebeesVars(): string[] {
  * Buzzebees exposes several login endpoints and which one authenticates
  * operators differs per deployment, so this is configurable rather than
  * hard-coded. A path is joined onto `merchantBaseUrl()`; a whole URL is used
- * as given, since it is easy to set this to one by mistake and a silent
- * "https://host.comhttps://host.com" is a miserable thing to debug.
+ * as given; and a bare host gets `/merchant/login` appended, since a host on
+ * its own is a base to send the login to rather than the endpoint itself.
  */
 export function operatorLoginPath(): string {
   return process.env.BUZZEBEES_LOGIN_PATH?.trim() || "/merchant/login";

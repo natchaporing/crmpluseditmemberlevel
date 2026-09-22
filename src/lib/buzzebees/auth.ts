@@ -15,6 +15,31 @@ import { logCurl } from "@/lib/buzzebees/curl-log";
  * operator receives here is the one their lookups and updates travel with.
  */
 
+/** Appended when the configured endpoint names a host but no path. */
+const DEFAULT_LOGIN_PATH = "/merchant/login";
+
+/**
+ * The URL to post a login to, from whatever `BUZZEBEES_LOGIN_PATH` holds.
+ *
+ * Three forms are accepted, because all three are natural things to put there:
+ * a path, joined onto the merchant base URL; a whole URL including the path,
+ * used as given; and a bare host, which is a base to send the login to rather
+ * than the endpoint itself, so the default path is appended instead of posting
+ * to the root.
+ */
+function loginUrl(configured: string): string {
+  if (!/^https?:\/\//i.test(configured)) {
+    return `${merchantBaseUrl()}${configured}`;
+  }
+
+  const url = new URL(configured);
+  if (url.pathname === "" || url.pathname === "/") {
+    url.pathname = DEFAULT_LOGIN_PATH;
+  }
+
+  return url.toString();
+}
+
 /** Error bodies are echoed for debugging, but only a bounded prefix. */
 const MAX_BODY_SNIPPET = 500;
 
@@ -91,10 +116,7 @@ async function performLogin(
     form.append(field, value);
   }
 
-  // The configured login endpoint may be given as a path or as a whole URL.
-  // Joining a whole URL onto the base would produce nonsense like
-  // "https://host.comhttps://host.com", which fails as "could not reach".
-  const url = /^https?:\/\//i.test(path) ? path : `${merchantBaseUrl()}${path}`;
+  const url = loginUrl(path);
 
   logCurl(
     `POST ${url}`,
