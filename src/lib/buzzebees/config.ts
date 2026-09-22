@@ -66,12 +66,14 @@ export function agencyId(): string {
  *
  * Signing in hits this alongside the wallet login: the two return different
  * tokens, and the back office uses each for its own set of endpoints.
+ *
+ * Required rather than defaulted. Every sign-in posts an operator's real
+ * credentials here, so the host is one to be chosen deliberately, not one this
+ * app guesses — an unset variable fails loudly instead of sending a password
+ * somewhere nobody picked.
  */
 export function ssoBaseUrl(): string {
-  return (
-    process.env.BUZZEBEES_SSO_BASE_URL?.trim() ||
-    "https://apilpw2sso.buzzebees.com"
-  );
+  return required("BUZZEBEES_SSO_BASE_URL");
 }
 
 /** As `BUZZEBEES_LOGIN_PATH`, but for single sign-on. */

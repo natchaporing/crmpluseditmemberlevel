@@ -175,7 +175,7 @@ The server reads `PORT` and `HOSTNAME` at startup; the image defaults to
 | `SESSION_SECRET` | Random, 32+ characters |
 | `BUZZEBEES_APP_ID` | Merchant API app id — the only one login needs |
 | `BUZZEBEES_LOGIN_PATH` | Optional — wallet login endpoint, defaults to `/merchant/login` |
-| `BUZZEBEES_SSO_BASE_URL` | Optional — single sign-on host, defaults to the production one |
+| `BUZZEBEES_SSO_BASE_URL` | Single sign-on host — required, never defaulted, since sign-ins post credentials to it |
 | `BUZZEBEES_SSO_LOGIN_PATH` | Optional — single sign-on endpoint, defaults to `/auth/bzbs_login` |
 | `BUZZEBEES_LOG_CURL` | Optional — log outgoing requests as curl commands |
 | `BUZZEBEES_AGENCY_ID` | Agency (tenant) whose members and levels this deployment manages — the production agency, which differs from the one in UAT captures |
