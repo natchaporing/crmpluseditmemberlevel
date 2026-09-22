@@ -4,7 +4,7 @@ import { recordActivity, readActivity } from "@/lib/activity/log";
 import { requireSession } from "@/lib/auth/dal";
 import { BuzzebeesAuthError } from "@/lib/buzzebees/auth";
 import { BuzzebeesApiError } from "@/lib/buzzebees/client";
-import { MissingMemberIdError } from "@/lib/buzzebees/user";
+import { IncompleteRecordError } from "@/lib/buzzebees/user";
 import {
   changeMemberLevel,
   findMemberByPhone,
@@ -125,10 +125,12 @@ export async function saveMemberLevel(
         message: "บันทึก Level ไม่สำเร็จ — ระบบ CRM ปฏิเสธหรือเชื่อมต่อไม่ได้ กรุณาลองใหม่",
       };
     }
-    if (error instanceof MissingMemberIdError) {
+    if (error instanceof IncompleteRecordError) {
+      console.error(`Refused to save: ${error.message}`);
       return {
         status: "error",
-        message: "ข้อมูลลูกค้าไม่มีรหัสผู้ใช้ จึงไม่สามารถบันทึก Level ได้",
+        message:
+          "ข้อมูลลูกค้าไม่ครบ จึงไม่บันทึก เพื่อไม่ให้ข้อมูลเดิมถูกลบ — กรุณาแจ้งผู้ดูแลระบบ",
       };
     }
     throw error;

@@ -2,7 +2,7 @@ import "server-only";
 
 import { firstNumber, firstString, isRecord } from "@/lib/buzzebees/payload";
 import { fetchPosProfile } from "@/lib/buzzebees/profile";
-import { updateMemberLevel } from "@/lib/buzzebees/user";
+import { updateMemberRecord, type MemberRecord } from "@/lib/buzzebees/user";
 import { findLevel, levelCodeById } from "@/lib/members/levels";
 import type { Member } from "@/lib/members/types";
 
@@ -83,6 +83,35 @@ function scalarAttributes(raw: Record<string, unknown>): Member["attributes"] {
   }
 
   return attributes;
+}
+
+/**
+ * The member's record as the update endpoint wants it.
+ *
+ * Built from the profile the CRM just returned, because that endpoint replaces
+ * the whole record: anything not sent is blanked. A field the profile does not
+ * carry becomes an empty string rather than being dropped, which preserves
+ * "this customer has no email" instead of erasing whatever is there.
+ */
+function toRecord(raw: Record<string, unknown>, member: Member): MemberRecord {
+  const ext = isRecord(raw.ExtensionJsonProperty) ? raw.ExtensionJsonProperty : {};
+  const text = (value: unknown): string =>
+    value === null || value === undefined ? "" : String(value);
+
+  return {
+    userId: member.userId,
+    levelName: member.levelCode,
+    point: String(member.point),
+    active: text(raw.Active ?? true),
+    firstName: text(raw.FirstName ?? member.firstName),
+    lastName: text(raw.LastName ?? member.lastName),
+    contactNumber: text(raw.Contact_Number ?? member.contactNumber),
+    email: text(raw.Email),
+    gender: text(raw.Gender),
+    birthDate: text(raw.BirthDate),
+    referenceInfo: text(ext.reference_info),
+    referenceInfo2: text(ext.reference_info2),
+  };
 }
 
 function toMember(raw: Record<string, unknown>, phone: string): Member {
@@ -168,9 +197,12 @@ export async function changeMemberLevel(options: {
   // fail in a way that looks like a bad request rather than a missing sign-in.
   if (!options.ssoToken) return { ok: false, error: "no-sso-token" };
 
-  await updateMemberLevel(
-    { userId: member.userId, levelName: target.code, agency: options.agencyId },
+  // The whole record goes back with only the level changed: the endpoint
+  // replaces what it is given, so a field left out is a field erased.
+  await updateMemberRecord(
+    { ...toRecord(member.raw, member), levelName: target.code },
     options.ssoToken,
+    options.agencyId,
   );
 
   return {
