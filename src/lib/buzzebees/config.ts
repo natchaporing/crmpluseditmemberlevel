@@ -21,14 +21,6 @@ function required(name: string): string {
   return value;
 }
 
-/** Non-secret endpoints: overridable to point at staging, production default. */
-export function merchantBaseUrl(): string {
-  return (
-    process.env.BUZZEBEES_MERCHANT_BASE_URL?.trim() ||
-    "https://api1servicewallet.buzzebees.com"
-  );
-}
-
 export function stampWalletBaseUrl(): string {
   return (
     process.env.BUZZEBEES_STAMP_WALLET_BASE_URL?.trim() ||
@@ -94,7 +86,7 @@ export function ssoBaseUrl(): string {
   return required("BUZZEBEES_SSO_BASE_URL");
 }
 
-/** As `BUZZEBEES_LOGIN_PATH`, but for single sign-on. */
+/** The single sign-on endpoint: a path, a whole URL, or a bare host. */
 export function ssoLoginPath(): string {
   return process.env.BUZZEBEES_SSO_LOGIN_PATH?.trim() || "/auth/bzbs_login";
 }
@@ -119,19 +111,6 @@ export function missingBuzzebeesVars(): string[] {
   return REQUIRED_BUZZEBEES_VARS.filter(
     (name) => !process.env[name]?.trim(),
   );
-}
-
-/**
- * Path of the endpoint that verifies an operator's credentials.
- *
- * Buzzebees exposes several login endpoints and which one authenticates
- * operators differs per deployment, so this is configurable rather than
- * hard-coded. A path is joined onto `merchantBaseUrl()`; a whole URL is used
- * as given; and a bare host gets `/merchant/login` appended, since a host on
- * its own is a base to send the login to rather than the endpoint itself.
- */
-export function operatorLoginPath(): string {
-  return process.env.BUZZEBEES_LOGIN_PATH?.trim() || "/merchant/login";
 }
 
 /**

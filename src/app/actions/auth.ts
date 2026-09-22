@@ -99,11 +99,7 @@ export async function login(
   // Credentials are checked by Buzzebees, not against any local list.
   let operator;
   try {
-    operator = await operatorLogin(username, password, {
-      terminalId,
-      branchId,
-      brandId,
-    });
+    operator = await operatorLogin(username, password);
   } catch (error) {
     // A login the service could not answer is not the operator's fault, so it
     // neither counts against the throttle nor reports a wrong password.
